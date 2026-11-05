@@ -2,25 +2,28 @@
 
 import { useEffect, useState } from 'react';
 import { useReducedMotion } from 'framer-motion';
-import TerminalFrame from './TerminalFrame';
+import GlassCard from './GlassCard';
 
 const TARGET_KG = 248.65;
+const CAPACITY_KG = 300;
 const TICK_MS = 120;
 const RAMP_TICKS = 28;
-
-const serialLine = (flag: 'ST' | 'US', kg: number) =>
-  `${flag},GS,+${kg.toFixed(2).padStart(7, '0')}kg`;
+const HISTORY_SIZE = 28;
+const RING_RADIUS = 48;
+const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
+const TICKS = Array.from({ length: 60 }, (_, i) => i);
 
 export default function WeighScene() {
   const reduceMotion = useReducedMotion();
   const [weight, setWeight] = useState(0);
   const [stable, setStable] = useState(false);
-  const [log, setLog] = useState<string[]>([]);
+  const [history, setHistory] = useState<number[]>([]);
 
   useEffect(() => {
     if (reduceMotion) {
       setWeight(TARGET_KG);
       setStable(true);
+      setHistory(Array.from({ length: HISTORY_SIZE }, () => TARGET_KG));
       return;
     }
 
@@ -29,64 +32,125 @@ export default function WeighScene() {
       tick += 1;
       const progress = Math.min(tick / RAMP_TICKS, 1);
       const isStable = progress >= 1;
-
       const jitter = isStable ? 0 : (Math.random() - 0.5) * 6 * (1 - progress);
       const next = Math.max(0, TARGET_KG * progress + jitter);
 
       setWeight(next);
       setStable(isStable);
+      setHistory((prev) => [...prev.slice(-(HISTORY_SIZE - 1)), next]);
 
-      if (tick % 6 === 0) {
-        setLog((prev) => [
-          ...prev.slice(-2),
-          serialLine(isStable ? 'ST' : 'US', next),
-        ]);
-      }
+      if (isStable) clearInterval(id);
     }, TICK_MS);
 
     return () => clearInterval(id);
   }, [reduceMotion]);
 
+  const fraction = Math.min(weight / CAPACITY_KG, 1);
+  const loadPct = (fraction * 100).toFixed(1);
+  const padded = [
+    ...Array.from({ length: HISTORY_SIZE - history.length }, () => 0),
+    ...history,
+  ];
+
+  const rows = [
+    { label: 'Capacity', value: `${CAPACITY_KG} kg` },
+    { label: 'Current load', value: `${loadPct}%` },
+    { label: 'Resolution', value: '0.01 kg' },
+    { label: 'Signal', value: stable ? 'Locked' : 'Settling' },
+  ];
+
   return (
-    <TerminalFrame title='Indicator · D-900s'>
-      <div className='flex flex-col gap-5'>
-        <div className='flex items-center justify-between text-[10px] font-medium uppercase tracking-widest text-zinc-500'>
-          <span>Platform scale · 300 kg</span>
-          <span>RS-232 · 9600 baud</span>
-        </div>
-
-        <div className='flex items-end justify-between'>
-          <div className='font-mono text-5xl font-bold tabular-nums text-red-500 drop-shadow-[0_0_12px_rgba(239,68,68,0.7)] xl:text-6xl'>
-            {weight.toFixed(2).padStart(7, '0')}
-            <span className='ml-2 text-xl text-red-400/80'>kg</span>
+    <GlassCard
+      eyebrow='Weighing'
+      title='Platform scale · 300 kg'
+      badge={stable ? 'Stable' : 'Settling'}
+      badgeActive={stable}
+    >
+      <div className='flex h-full flex-col justify-between'>
+        <div className='flex items-center gap-6'>
+          <div className='relative h-36 w-36 flex-none'>
+            <svg viewBox='0 0 120 120' className='h-full w-full'>
+              <defs>
+                <linearGradient id='weighRing' x1='0' y1='0' x2='1' y2='1'>
+                  <stop offset='0%' stopColor='#b91c1c' />
+                  <stop offset='100%' stopColor='#fca5a5' />
+                </linearGradient>
+              </defs>
+              {TICKS.map((i) => (
+                <line
+                  key={i}
+                  x1='60'
+                  y1='2'
+                  x2='60'
+                  y2={i % 5 === 0 ? 8 : 5}
+                  transform={`rotate(${i * 6} 60 60)`}
+                  stroke='rgba(255,255,255,0.28)'
+                  strokeWidth={i % 5 === 0 ? 1 : 0.6}
+                />
+              ))}
+              <circle
+                cx='60'
+                cy='60'
+                r={RING_RADIUS}
+                fill='none'
+                stroke='rgba(255,255,255,0.08)'
+                strokeWidth='6'
+              />
+              <circle
+                cx='60'
+                cy='60'
+                r={RING_RADIUS}
+                fill='none'
+                stroke='url(#weighRing)'
+                strokeWidth='6'
+                strokeLinecap='round'
+                strokeDasharray={RING_LENGTH}
+                strokeDashoffset={RING_LENGTH * (1 - fraction)}
+                transform='rotate(-90 60 60)'
+                className='drop-shadow-[0_0_6px_rgba(239,68,68,0.7)]'
+              />
+            </svg>
+            <div className='absolute inset-0 flex flex-col items-center justify-center'>
+              <span className='text-2xl font-semibold tabular-nums text-white'>
+                {weight.toFixed(2)}
+              </span>
+              <span className='text-[10px] font-medium uppercase tracking-widest text-red-400'>
+                kg
+              </span>
+            </div>
           </div>
 
-          <div
-            className={`flex items-center gap-2 rounded-md border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider transition-colors ${
-              stable
-                ? 'border-emerald-700 bg-emerald-950/60 text-emerald-300'
-                : 'border-zinc-700 bg-zinc-900 text-zinc-500'
-            }`}
-          >
-            <span
-              className={`h-1.5 w-1.5 rounded-full ${
-                stable ? 'animate-pulse bg-emerald-400' : 'bg-zinc-600'
-              }`}
-            />
-            {stable ? 'Stable' : 'Settling'}
+          <div className='flex min-w-0 flex-1 flex-col'>
+            {rows.map((row) => (
+              <div
+                key={row.label}
+                className='flex items-center justify-between border-b border-white/10 py-1.5 text-xs last:border-b-0'
+              >
+                <span className='text-zinc-500'>{row.label}</span>
+                <span className='font-medium tabular-nums text-zinc-100'>{row.value}</span>
+              </div>
+            ))}
           </div>
         </div>
 
-        <div className='flex min-h-[64px] flex-col gap-1 rounded-md border border-zinc-800 bg-zinc-900/70 px-3 py-2 font-mono text-[11px] text-zinc-400'>
-          {log.map((line, i) => (
-            <span key={`${i}-${line}`}>
-              <span className='mr-2 text-red-500'>&gt;</span>
-              {line}
-            </span>
-          ))}
+        <div className='flex flex-col gap-1.5'>
+          <span className='text-[10px] uppercase tracking-widest text-zinc-500'>
+            Signal history
+          </span>
+          <div className='flex h-12 items-end gap-1'>
+            {padded.map((value, i) => (
+              <div
+                key={i}
+                className='flex-1 rounded-sm bg-gradient-to-t from-red-800 to-red-400'
+                style={{
+                  height: `${Math.max((value / CAPACITY_KG) * 100, 3)}%`,
+                  opacity: 0.35 + (i / HISTORY_SIZE) * 0.65,
+                }}
+              />
+            ))}
+          </div>
         </div>
       </div>
-    </TerminalFrame>
+    </GlassCard>
   );
 }
-
