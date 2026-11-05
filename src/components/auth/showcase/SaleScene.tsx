@@ -1,126 +1,192 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
-import { useTypewriter } from '@/hooks/useTypewriter';
-import TerminalFrame from './TerminalFrame';
-import Cursor from './Cursor';
+import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
+import GlassCard from "./GlassCard";
+import CountUp from "./CountUp";
 
-interface Layer {
+interface Batch {
   id: string;
+  name: string;
+  received: string;
   qty: number;
   unitCost: number;
 }
 
-const COMMAND = 'sell --sku "S-Type Load Cell 500kg" --qty 14';
+const PRODUCT = "S-Type Load Cell 500 kg";
 const SALE_QTY = 14;
+const UNIT_PRICE = 24000;
 
-const LAYERS: Layer[] = [
-  { id: 'L-001', qty: 10, unitCost: 18500 },
-  { id: 'L-002', qty: 40, unitCost: 19200 },
-  { id: 'L-003', qty: 25, unitCost: 20100 },
+const BATCHES: Batch[] = [
+  {
+    id: "a",
+    name: "Batch A",
+    received: "Received 12 Mar",
+    qty: 10,
+    unitCost: 18500,
+  },
+  {
+    id: "b",
+    name: "Batch B",
+    received: "Received 04 Jun",
+    qty: 40,
+    unitCost: 19200,
+  },
+  {
+    id: "c",
+    name: "Batch C",
+    received: "Received 19 Sep",
+    qty: 25,
+    unitCost: 20100,
+  },
 ];
 
-function deductFifo(layers: Layer[], qtyNeeded: number) {
+const deductOldestFirst = (batches: Batch[], qtyNeeded: number) => {
   let remaining = qtyNeeded;
-  let cogs = 0;
+  let cost = 0;
 
-  const result = layers.map((layer) => {
-    const taken = Math.min(layer.qty, Math.max(remaining, 0));
+  const result = batches.map((batch) => {
+    const taken = Math.min(batch.qty, remaining);
     remaining -= taken;
-    cogs += taken * layer.unitCost;
-    return { ...layer, left: layer.qty - taken };
+    cost += taken * batch.unitCost;
+    return { ...batch, left: batch.qty - taken };
   });
 
-  return { result, cogs };
-}
+  return { result, cost };
+};
 
-const { result: AFTER, cogs: COGS } = deductFifo(LAYERS, SALE_QTY);
+const { result: AFTER, cost: COST } = deductOldestFirst(BATCHES, SALE_QTY);
+const REVENUE = SALE_QTY * UNIT_PRICE;
+const PROFIT = REVENUE - COST;
+const MARGIN = ((PROFIT / REVENUE) * 100).toFixed(1);
 
-const formatPkr = (n: number) => `PKR ${n.toLocaleString('en-US')}`;
+const STATS = [
+  {
+    label: "Cost of goods",
+    value: COST,
+    note: `${SALE_QTY} units`,
+    highlight: false,
+  },
+  {
+    label: "Revenue",
+    value: REVENUE,
+    note: `PKR ${UNIT_PRICE.toLocaleString("en-US")} each`,
+    highlight: false,
+  },
+  {
+    label: "Gross profit",
+    value: PROFIT,
+    note: `${MARGIN}% margin`,
+    highlight: true,
+  },
+] as const;
+
+const getStatus = (left: number, qty: number) => {
+  if (left === 0) return { label: "Used up", className: "text-red-400" };
+  if (left < qty) return { label: "Partly used", className: "text-white" };
+  return { label: "In stock", className: "text-zinc-500" };
+};
 
 export default function SaleScene() {
-  const { typed, done } = useTypewriter(COMMAND);
   const [applied, setApplied] = useState(false);
 
   useEffect(() => {
-    if (!done) return;
-    const id = setTimeout(() => setApplied(true), 600);
+    const id = setTimeout(() => setApplied(true), 900);
     return () => clearTimeout(id);
-  }, [done]);
+  }, []);
 
   return (
-    <TerminalFrame title='Inventory · FIFO deduction'>
-      <div className='flex flex-col gap-5'>
-        <div className='font-mono text-sm text-zinc-200'>
-          <span className='mr-2 text-red-500'>$</span>
-          {typed}
-          {!applied && <Cursor />}
+    <GlassCard
+      eyebrow="Stock"
+      title="Oldest stock sells first"
+      badge="Auto-costed"
+      badgeActive={applied}
+    >
+      <div className="flex h-full flex-col justify-between">
+        <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+          <div className="flex flex-col">
+            <span className="text-[10px] uppercase tracking-widest text-zinc-500">
+              Sale order
+            </span>
+            <span className="text-sm font-medium text-white">{PRODUCT}</span>
+          </div>
+          <span className="text-sm font-semibold text-red-400">
+            {SALE_QTY} units
+          </span>
         </div>
 
-        <div className='flex flex-col gap-3'>
-          {AFTER.map((layer) => {
-            const pct = applied ? (layer.left / layer.qty) * 100 : 100;
-            const status = !applied
-              ? 'ACTIVE'
-              : layer.left === 0
-                ? 'DEPLETED'
-                : layer.left < layer.qty
-                  ? 'PARTIAL'
-                  : 'ACTIVE';
+        <div className="flex flex-col gap-2.5">
+          {AFTER.map((batch, index) => {
+            const shown = applied ? batch.left : batch.qty;
+            const pct = (shown / batch.qty) * 100;
+            const status = getStatus(shown, batch.qty);
 
             return (
-              <div key={layer.id} className='flex items-center gap-3'>
-                <span className='w-12 font-mono text-[11px] text-zinc-500'>
-                  {layer.id}
-                </span>
-
-                <div className='h-2 flex-1 overflow-hidden rounded-full bg-zinc-900'>
+              <div key={batch.id} className="flex items-center gap-3">
+                <div className="flex w-36 flex-col">
+                  <span className="text-xs font-medium text-zinc-200">
+                    {batch.name}
+                  </span>
+                  <span className="truncate text-[10px] text-zinc-500">
+                    {batch.received} · PKR{" "}
+                    {batch.unitCost.toLocaleString("en-US")}
+                  </span>
+                </div>
+                <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-white/10">
                   <motion.div
-                    className='h-full rounded-full bg-gradient-to-r from-red-700 to-red-500 shadow-[0_0_8px_rgba(220,38,38,0.6)]'
-                    initial={{ width: '100%' }}
+                    className="h-full rounded-full bg-gradient-to-r from-red-700 via-red-500 to-red-400 shadow-[0_0_10px_rgba(239,68,68,0.7)]"
+                    initial={{ width: "100%" }}
                     animate={{ width: `${pct}%` }}
-                    transition={{ duration: 0.9, ease: 'easeOut' }}
+                    transition={{
+                      duration: 1,
+                      ease: "easeOut",
+                      delay: index * 0.15,
+                    }}
                   />
                 </div>
-
-                <span className='w-16 text-right font-mono text-[11px] text-zinc-400'>
-                  {applied ? layer.left : layer.qty} units
-                </span>
-                <span className='w-14 text-right font-mono text-[11px] text-zinc-600'>
-                  @{layer.unitCost.toLocaleString('en-US')}
+                <span className="w-14 text-right text-xs tabular-nums text-zinc-300">
+                  {shown} units
                 </span>
                 <span
-                  className={`w-16 text-right text-[10px] font-semibold tracking-wider ${
-                    status === 'DEPLETED'
-                      ? 'text-red-400'
-                      : status === 'PARTIAL'
-                        ? 'text-amber-400'
-                        : 'text-zinc-500'
-                  }`}
+                  className={`w-16 text-right text-[10px] font-semibold uppercase tracking-wider ${status.className}`}
                 >
-                  {status}
+                  {status.label}
                 </span>
               </div>
             );
           })}
         </div>
 
-        <motion.div
-          className='flex items-center justify-between rounded-md border border-zinc-800 bg-zinc-900/70 px-3 py-2 text-[11px]'
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: applied ? 1 : 0, y: applied ? 0 : 6 }}
-          transition={{ delay: 0.6, duration: 0.4 }}
-        >
-          <span className='text-zinc-400'>
-            StockMovement logged · {SALE_QTY} units out
-          </span>
-          <span className='font-mono font-semibold text-red-400'>
-            COGS {formatPkr(COGS)}
-          </span>
-        </motion.div>
+        <div className="flex gap-2">
+          {STATS.map((stat) => (
+            <div
+              key={stat.label}
+              className={`flex flex-1 flex-col gap-0.5 rounded-lg border px-3 py-2 ${
+                stat.highlight
+                  ? "border-red-500/40 bg-red-500/10"
+                  : "border-white/10 bg-white/[0.03]"
+              }`}
+            >
+              <span className="text-[10px] uppercase tracking-widest text-zinc-500">
+                {stat.label}
+              </span>
+              <span
+                className={`text-sm font-semibold tabular-nums ${
+                  stat.highlight ? "text-white" : "text-zinc-200"
+                }`}
+              >
+                PKR{" "}
+                <CountUp value={stat.value} active={applied} delaySec={0.4} />
+              </span>
+              <span
+                className={`text-[10px] ${stat.highlight ? "text-red-300" : "text-zinc-500"}`}
+              >
+                {stat.note}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
-    </TerminalFrame>
+    </GlassCard>
   );
 }
-
