@@ -1,0 +1,204 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  TECHNICIAN
+}
+
+enum LayerStatus {
+  ACTIVE
+  DEPLETED
+}
+
+enum LayerSource {
+  OPENING_STOCK
+  PURCHASE
+  TRANSFER_IN
+  ADJUSTMENT
+}
+
+enum MovementType {
+  OPENING_STOCK
+  PURCHASE
+  SALE_DEDUCTION
+  TRANSFER_OUT
+  TRANSFER_IN
+  CALIBRATION_USAGE
+  SCRAP_ADJUSTMENT
+}
+
+enum CertStatus {
+  DRAFT
+  PENDING_INSPECTION
+  APPROVED_GOVT_SINDH
+  REJECTED
+  EXPIRED
+}
+
+model User {
+  id                 String                   @id @default(cuid())
+  supabaseId         String?                  @unique
+  name               String
+  email              String                   @unique
+  passwordHash       String?
+  role               Role                     @default(TECHNICIAN)
+  phone              String?
+  avatarUrl          String?
+  isActive           Boolean                  @default(true)
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+
+  stockMovements     StockMovement[]
+  calibrationsIssued CalibrationCertificate[]
+  managedWarehouses  Warehouse[]
+
+  @@map("users")
+}
+
+model Warehouse {
+  id              String           @id @default(cuid())
+  name            String
+  code            String           @unique
+  location        String
+  city            String           @default("Karachi")
+  isHeadquarters  Boolean          @default(false)
+  managerId       String?
+  manager         User?            @relation(fields: [managerId], references: [id])
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  inventoryLayers InventoryLayer[]
+  sourceMovements StockMovement[]  @relation("SourceWarehouse")
+  destMovements   StockMovement[]  @relation("DestWarehouse")
+
+  @@map("warehouses")
+}
+
+model ProductCategory {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  code        String    @unique
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  products    Product[]
+
+  @@map("product_categories")
+}
+
+model Product {
+  id              String                   @id @default(cuid())
+  sku             String                   @unique
+  name            String
+  description     String?
+  brand           String?
+  model           String?
+  capacity        String?
+  resolution      String?
+  unit            String                   @default("PCS")
+  hasSerialPort   Boolean                  @default(false)
+  rs232Protocol   String?
+  minStockLevel   Decimal                  @default(5)
+  sellingPrice    Decimal                  @default(0)
+  categoryId      String
+  category        ProductCategory          @relation(fields: [categoryId], references: [id])
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  inventoryLayers InventoryLayer[]
+  stockMovements  StockMovement[]
+  calibrations    CalibrationCertificate[]
+
+  @@map("products")
+}
+
+model InventoryLayer {
+  id              String           @id @default(cuid())
+  productId       String
+  product         Product          @relation(fields: [productId], references: [id])
+  warehouseId     String
+  warehouse       Warehouse        @relation(fields: [warehouseId], references: [id])
+  batchNumber     String?
+  originalQty     Decimal
+  remainingQty    Decimal
+  unitCost        Decimal
+  source          LayerSource      @default(PURCHASE)
+  sourceReference String?
+  fifoDate        DateTime         @default(now())
+  status          LayerStatus      @default(ACTIVE)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  stockMovements  StockMovement[]
+
+  @@index([productId, warehouseId, status, fifoDate])
+  @@map("inventory_layers")
+}
+
+model StockMovement {
+  id                String          @id @default(cuid())
+  reference         String          @unique
+  type              MovementType
+  productId         String
+  product           Product         @relation(fields: [productId], references: [id])
+  quantity          Decimal
+  unitCost          Decimal?
+  totalCost         Decimal?
+  inventoryLayerId  String?
+  inventoryLayer    InventoryLayer? @relation(fields: [inventoryLayerId], references: [id])
+  sourceWarehouseId String?
+  sourceWarehouse   Warehouse?      @relation("SourceWarehouse", fields: [sourceWarehouseId], references: [id])
+  destWarehouseId   String?
+  destWarehouse     Warehouse?      @relation("DestWarehouse", fields: [destWarehouseId], references: [id])
+  performedById     String?
+  performedBy       User?           @relation(fields: [performedById], references: [id])
+  notes             String?
+  reason            String?
+  createdAt         DateTime        @default(now())
+
+  @@index([productId, type, createdAt])
+  @@index([inventoryLayerId])
+  @@map("stock_movements")
+}
+
+model CalibrationCertificate {
+  id                      String      @id @default(cuid())
+  certificateNumber       String      @unique
+  govtSindhVerificationNo String?
+  clientName              String
+  clientAddress           String?
+  clientContact           String?
+  productId               String?
+  product                 Product?    @relation(fields: [productId], references: [id])
+  equipmentModel          String
+  serialNumber            String
+  nominalCapacity         Decimal
+  readability             Decimal
+  calibrationDate         DateTime    @default(now())
+  nextDueDate             DateTime
+  environmentalTemp       Decimal?
+  environmentalHumidity   Decimal?
+  standardWeightUsed      String?
+  calibrationResults      Json?
+  status                  CertStatus  @default(DRAFT)
+  inspectorTechnicianId   String?
+  inspector               User?       @relation(fields: [inspectorTechnicianId], references: [id])
+  notes                   String?
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+
+  @@index([certificateNumber])
+  @@index([status])
+  @@index([nextDueDate])
+  @@map("calibration_certificates")
+}
