@@ -3,7 +3,7 @@ import { PrismaClient, Role, LayerStatus, LayerSource, MovementType, CertStatus 
 const prisma = new PrismaClient()
 
 async function main() {
-  console.log('⚡ Initializing United Scale ERP Master Database...')
+  console.log('Initializing United Scale ERP Master Database...')
 
   await prisma.calibrationCertificate.deleteMany()
   await prisma.stockMovement.deleteMany()
@@ -64,7 +64,7 @@ async function main() {
     },
   })
 
-  console.log('✓ Warehouses created (Mashriq Centre HQ, Gulshan Godown)')
+  console.log('Warehouses created (Mashriq Centre HQ, Gulshan Godown)')
 
   const catIndicators = await prisma.productCategory.create({
     data: {
@@ -98,7 +98,7 @@ async function main() {
     },
   })
 
-  console.log('✓ Product Categories created')
+  console.log('Product Categories created')
 
   const prodD900s = await prisma.product.create({
     data: {
@@ -170,7 +170,7 @@ async function main() {
     },
   })
 
-  console.log('✓ Products created (D-900s, S-Type Load Cell, 500X600 Scale, D-60)')
+  console.log('Products created (D-900s, S-Type Load Cell, 500X600 Scale, D-60)')
 
 
   const layer1D900 = await prisma.inventoryLayer.create({
@@ -262,7 +262,7 @@ async function main() {
     },
   })
 
-  console.log('✓ Strict FIFO Inventory Layers established')
+  console.log('Strict FIFO Inventory Layers established')
 
   await prisma.stockMovement.create({
     data: {
