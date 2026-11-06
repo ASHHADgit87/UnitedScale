@@ -1,42 +1,61 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Mail, Lock, User, Phone, Eye, EyeOff, AlertCircle, CheckCircle2 } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Eye, EyeOff, Lock, Mail, Phone, User } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  AuthAlert,
+  AuthButton,
+  AuthCard,
+  AuthField,
+} from "@/components/auth/AuthUI";
+
+const MIN_PASSWORD_LENGTH = 10;
 
 export default function SignupPage() {
   const router = useRouter();
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
-  const [role, setRole] = useState<"TECHNICIAN" | "MANAGER" | "ADMIN">("TECHNICIAN");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [successNotice, setSuccessNotice] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
 
-  const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSignup = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     setError(null);
+
+    if (name.trim().length < 2) {
+      setError("Please enter your full name.");
+      return;
+    }
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setError(
+        `Use at least ${MIN_PASSWORD_LENGTH} characters for your password.`,
+      );
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("The two passwords do not match.");
+      return;
+    }
+
     setLoading(true);
 
     try {
       const supabase = createClient();
-
       const { data, error: authError } = await supabase.auth.signUp({
-        email: email.trim(),
+        email: email.trim().toLowerCase(),
         password,
         options: {
           data: {
             name: name.trim(),
-            role,
             phone: phone.trim() || null,
           },
         },
@@ -48,196 +67,141 @@ export default function SignupPage() {
         return;
       }
 
-      if (data?.user) {
-        await fetch("/api/auth/sync-user", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            supabaseId: data.user.id,
-            email: email.trim(),
-            name: name.trim(),
-            role,
-            phone: phone.trim() || null,
-          }),
-        });
-
-        if (data.session) {
-          router.push("/");
-          router.refresh();
-        } else {
-          setSuccessNotice(
-            "Account created successfully. Please verify your email or proceed to sign in."
-          );
-          setLoading(false);
-        }
+      if (data.session) {
+        router.replace("/pending");
+        router.refresh();
+        return;
       }
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Registration failed");
+
+      setSubmitted(true);
+      setLoading(false);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Registration failed. Please try again.",
+      );
       setLoading(false);
     }
   };
 
-  return (
-    <Card className="border-zinc-800 bg-zinc-950/85 backdrop-blur-xl shadow-2xl relative overflow-hidden">
-      <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-red-600 to-transparent shadow-[0_0_10px_rgba(220,38,38,0.8)]" />
-
-      <CardHeader className="space-y-1.5 p-6 sm:p-8 pb-4">
-        <CardTitle className="text-xl font-bold tracking-tight text-zinc-100">
-          Create Account
-        </CardTitle>
-        <CardDescription className="text-xs text-zinc-400">
-          Register authorized access for United Scale staff.
-        </CardDescription>
-      </CardHeader>
-
-      <CardContent className="p-6 sm:p-8 pt-0 space-y-4">
-        {error && (
-          <div className="p-3 rounded-md bg-red-950/60 border border-red-800/80 text-xs text-red-300 flex items-start gap-2.5">
-            <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-            <div className="leading-relaxed">{error}</div>
-          </div>
-        )}
-
-        {successNotice ? (
-          <div className="p-4 rounded-md bg-zinc-900/90 border border-zinc-800 text-xs text-zinc-200 space-y-3">
-            <div className="flex items-center gap-2 text-emerald-400 font-semibold">
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Registration Complete</span>
-            </div>
-            <p className="leading-relaxed text-zinc-400">{successNotice}</p>
-            <Link href="/login" className="block pt-1">
-              <Button className="w-full bg-red-600 hover:bg-red-500 text-white text-xs">
-                Proceed to Sign In →
-              </Button>
-            </Link>
-          </div>
-        ) : (
-          <form onSubmit={handleSignup} className="space-y-3.5">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-zinc-300 block">
-                Full Name
-              </label>
-              <div className="relative">
-                <User className="absolute left-3 top-2.5 w-4 h-4 text-zinc-500" />
-                <Input
-                  type="text"
-                  required
-                  placeholder="e.g. Muhammad Ali"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="pl-9 bg-zinc-900/80 border-zinc-800 focus:border-red-600 focus:ring-red-600 text-zinc-100 placeholder:text-zinc-600 text-xs"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-zinc-300 block">
-                Official Email
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-2.5 w-4 h-4 text-zinc-500" />
-                <Input
-                  type="email"
-                  required
-                  placeholder="name@unitedscale.pk"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="pl-9 bg-zinc-900/80 border-zinc-800 focus:border-red-600 focus:ring-red-600 text-zinc-100 placeholder:text-zinc-600 text-xs"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-zinc-300 block">
-                Facility Access Role
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {(
-                  [
-                    { key: "TECHNICIAN", label: "Technician" },
-                    { key: "MANAGER", label: "Manager" },
-                    { key: "ADMIN", label: "Admin" },
-                  ] as const
-                ).map(({ key, label }) => (
-                  <button
-                    key={key}
-                    type="button"
-                    suppressHydrationWarning
-                    onClick={() => setRole(key)}
-                    className={`py-2 px-3 rounded text-xs font-medium transition-all text-center border ${
-                      role === key
-                        ? "bg-red-950/80 border-red-600 text-red-200 shadow-[0_0_10px_rgba(220,38,38,0.3)]"
-                        : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-zinc-300 block">
-                Phone Contact (Optional)
-              </label>
-              <div className="relative">
-                <Phone className="absolute left-3 top-2.5 w-4 h-4 text-zinc-500" />
-                <Input
-                  type="tel"
-                  placeholder="+92 300 1234567"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="pl-9 bg-zinc-900/80 border-zinc-800 focus:border-red-600 focus:ring-red-600 text-zinc-100 placeholder:text-zinc-600 text-xs"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-zinc-300 block">
-                Password (Min 6 characters)
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-2.5 w-4 h-4 text-zinc-500" />
-                <Input
-                  type={showPassword ? "text" : "password"}
-                  required
-                  minLength={6}
-                  placeholder="••••••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="pl-9 pr-9 bg-zinc-900/80 border-zinc-800 focus:border-red-600 focus:ring-red-600 text-zinc-100 placeholder:text-zinc-600 text-xs"
-                />
-                <button
-                  type="button"
-                  suppressHydrationWarning
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-2.5 text-zinc-500 hover:text-zinc-300 transition-colors"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <Button
-              type="submit"
-              disabled={loading}
-              className="w-full py-5 text-sm font-semibold bg-red-600 hover:bg-red-500 text-white shadow-[0_0_15px_rgba(220,38,38,0.4)] transition-all mt-2"
-            >
-              {loading ? "Creating Account..." : "Create Account"}
-            </Button>
-          </form>
-        )}
-      </CardContent>
-
-      <CardFooter className="p-6 sm:p-8 pt-0 border-t border-zinc-850/80 bg-zinc-950/60 flex items-center justify-between text-xs">
-        <span className="text-zinc-500">Already have an account?</span>
-        <Link
-          href="/login"
-          className="text-red-400 hover:text-red-300 font-medium transition-colors"
-        >
-          Sign In →
+  if (submitted) {
+    return (
+      <AuthCard
+        eyebrow="Request received"
+        title="Check your inbox"
+        description="If this email can be registered, a verification link is on its way. After you verify it, an administrator will review your request and assign your role."
+      >
+        <Link href="/login" className="block">
+          <AuthButton type="button">Back to sign in</AuthButton>
         </Link>
-      </CardFooter>
-    </Card>
+      </AuthCard>
+    );
+  }
+
+  return (
+    <AuthCard
+      eyebrow="Staff onboarding"
+      title="Request access"
+      description="Create your account. An administrator approves it and assigns your role."
+      footer={
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-zinc-500">Already approved?</span>
+          <Link
+            href="/login"
+            className="font-medium text-red-400 transition-colors hover:text-red-300"
+          >
+            Sign in
+          </Link>
+        </div>
+      }
+    >
+      {error && <AuthAlert tone="error">{error}</AuthAlert>}
+
+      <form onSubmit={handleSignup} className="flex flex-col gap-4">
+        <AuthField
+          label="Full name"
+          name="name"
+          type="text"
+          required
+          autoComplete="name"
+          placeholder="e.g. Muhammad Ali"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          icon={<User className="h-4 w-4" />}
+        />
+
+        <AuthField
+          label="Work email"
+          name="email"
+          type="email"
+          required
+          autoComplete="email"
+          placeholder="name@unitedscale.pk"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          icon={<Mail className="h-4 w-4" />}
+        />
+
+        <AuthField
+          label="Phone (optional)"
+          name="phone"
+          type="tel"
+          autoComplete="tel"
+          placeholder="+92 300 1234567"
+          value={phone}
+          onChange={(event) => setPhone(event.target.value)}
+          icon={<Phone className="h-4 w-4" />}
+        />
+
+        <AuthField
+          label="Password"
+          name="password"
+          type={showPassword ? "text" : "password"}
+          required
+          minLength={MIN_PASSWORD_LENGTH}
+          autoComplete="new-password"
+          placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          icon={<Lock className="h-4 w-4" />}
+          trailing={
+            <button
+              type="button"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              onClick={() => setShowPassword((current) => !current)}
+              className="rounded-md p-1.5 text-zinc-500 transition-colors hover:text-white"
+            >
+              {showPassword ? (
+                <EyeOff className="h-4 w-4" />
+              ) : (
+                <Eye className="h-4 w-4" />
+              )}
+            </button>
+          }
+        />
+
+        <AuthField
+          label="Confirm password"
+          name="confirmPassword"
+          type={showPassword ? "text" : "password"}
+          required
+          autoComplete="new-password"
+          placeholder="Repeat your password"
+          value={confirmPassword}
+          onChange={(event) => setConfirmPassword(event.target.value)}
+          icon={<Lock className="h-4 w-4" />}
+        />
+
+        <AuthAlert tone="info">
+          Your role is assigned by an administrator after approval. It cannot be
+          chosen here.
+        </AuthAlert>
+
+        <AuthButton type="submit" loading={loading} loadingText="Submitting...">
+          Submit request
+        </AuthButton>
+      </form>
+    </AuthCard>
   );
 }
