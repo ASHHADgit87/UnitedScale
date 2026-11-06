@@ -1,51 +1,45 @@
 "use client";
 
-import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard,
-  Layers,
   ArrowLeftRight,
-  ShoppingCart,
-  PackagePlus,
   Award,
   BarChart3,
-  Lock,
-  Boxes,
-  Radio,
-  Cpu,
-  ShieldCheck,
-  ChevronRight,
+  Layers,
+  LayoutDashboard,
+  PackagePlus,
+  ShoppingCart,
+  Truck,
+  Users,
+  X,
+  type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BrandLogo } from "@/components/layout/BrandLogo";
+import { getInitials } from "@/lib/format";
+import {
+  ROLE_LABELS,
+  canAccessPath,
+  type SessionUser,
+} from "@/lib/permissions";
 
 interface NavItem {
   title: string;
   href: string;
-  icon: React.ElementType;
-  badge?: string;
-  isLocked?: boolean;
-  subItems?: { title: string; href: string; icon: React.ElementType }[];
+  icon: LucideIcon;
+  soon?: boolean;
 }
 
-const navItems: NavItem[] = [
+const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
-    title: "Dashboard",
-    href: "/",
-    icon: LayoutDashboard,
+    label: "Overview",
+    items: [{ title: "Dashboard", href: "/", icon: LayoutDashboard }],
   },
   {
-    title: "Inventory",
-    href: "/inventory/layers",
-    icon: Boxes,
-    subItems: [
-      {
-        title: "FIFO Layers",
-        href: "/inventory/layers",
-        icon: Layers,
-      },
+    label: "Inventory",
+    items: [
+      { title: "Stock Batches", href: "/inventory/layers", icon: Layers },
       {
         title: "Stock Movements",
         href: "/inventory/movements",
@@ -54,208 +48,155 @@ const navItems: NavItem[] = [
     ],
   },
   {
-    title: "Sales (Deduction)",
-    href: "/sales",
-    icon: ShoppingCart,
+    label: "Operations",
+    items: [
+      { title: "Sales", href: "/sales", icon: ShoppingCart },
+      { title: "Purchasing", href: "/purchasing", icon: PackagePlus },
+      { title: "Transfers", href: "/transfers", icon: Truck },
+      { title: "Calibration", href: "/calibration", icon: Award, soon: true },
+    ],
   },
   {
-    title: "Purchasing (Inflow)",
-    href: "/purchasing",
-    icon: PackagePlus,
+    label: "Insights",
+    items: [{ title: "Reports", href: "/reports", icon: BarChart3 }],
   },
   {
-    title: "Warehouse Transfer",
-    href: "/transfers",
-    icon: ArrowLeftRight,
-  },
-  {
-    title: "Calibration",
-    href: "/calibration",
-    icon: Award,
-    isLocked: true,
-    badge: "PHASE 3",
-  },
-  {
-    title: "Reports",
-    href: "/reports",
-    icon: BarChart3,
+    label: "Administration",
+    items: [{ title: "Team Access", href: "/admin/users", icon: Users }],
   },
 ];
 
-export function Sidebar() {
-  const pathname = usePathname();
-
-  const isRouteActive = (href: string, subItems?: { href: string }[]) => {
-    if (pathname === href) return true;
-    if (subItems?.some((sub) => pathname.startsWith(sub.href))) return true;
-    if (href !== "/" && pathname.startsWith(href)) return true;
-    return false;
-  };
-
-  return (
-    <aside className="w-72 shrink-0 border-r border-zinc-800/80 bg-zinc-950/80 backdrop-blur-md flex flex-col h-screen select-none relative z-30">
-     
-      <div className="p-5 border-b border-zinc-800/80 flex items-center gap-3">
-        <div className="relative group">
-          <div className="absolute -inset-1 rounded-full bg-red-600/30 blur-sm group-hover:bg-red-600/50 transition-all duration-300" />
-          <BrandLogo className="relative w-20 h-20 object-contain rounded-full border border-red-600/50 bg-zinc-900" />
-        </div>
-        <div className="flex flex-col min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-bold tracking-wider text-base text-zinc-100 uppercase">
-              United Scale
-            </span>
-            <span className="px-1.5 py-0.5 text-[9px] font-mono uppercase bg-red-950 text-red-400 border border-red-800/80 rounded">
-              v1.0
-            </span>
-          </div>
-          <span className="text-[11px] font-mono text-zinc-400 truncate">
-            Mashriq Centre, Karachi
-          </span>
-        </div>
-      </div>
-
-     
-      <div className="px-4 py-2.5 mx-3 mt-3 bg-zinc-900/60 border border-zinc-850 rounded-md flex items-center justify-between text-xs font-mono">
-        <div className="flex items-center gap-2">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-red-600"></span>
-          </span>
-          <span className="text-zinc-400 text-[10px] tracking-wider uppercase">
-            RS-232 BUS: <span className="text-emerald-400">READY</span>
-          </span>
-        </div>
-        <div className="flex items-center gap-1 text-[10px] text-zinc-400">
-          <Cpu className="w-3 h-3 text-red-500" />
-          <span>FIFO ACID</span>
-        </div>
-      </div>
-
-      
-      <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1.5 scrollbar-thin scrollbar-thumb-zinc-800">
-        <div className="px-2 pb-1 text-[10px] font-mono uppercase tracking-widest text-zinc-400">
-          Core Operations
-        </div>
-
-        {navItems.map((item) => {
-          const active = isRouteActive(item.href, item.subItems);
-          const Icon = item.icon;
-
-          if (item.isLocked) {
-            return (
-              <div
-                key={item.title}
-                className={cn(
-                  "group relative flex items-center justify-between px-3.5 py-2.5 rounded-md text-sm font-medium transition-all text-zinc-400 cursor-not-allowed bg-zinc-900/30 border border-zinc-850/60"
-                )}
-                title="Phase 3: Sindh Calibration Certificate Engine (Locked)"
-              >
-                <div className="flex items-center gap-3">
-                  <Icon className="w-4 h-4 text-zinc-400" />
-                  <span className="font-mono text-xs">{item.title}</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700/60">
-                    {item.badge}
-                  </span>
-                  <Lock className="w-3.5 h-3.5 text-zinc-400" />
-                </div>
-              </div>
-            );
-          }
-
-          return (
-            <div key={item.title} className="space-y-1">
-              <Link
-                href={item.href}
-                className={cn(
-                  "relative flex items-center justify-between px-3.5 py-2.5 rounded-md text-sm font-medium transition-all duration-150 group",
-                  active
-                    ? "border-l-4 border-red-600 shadow-[0_0_10px_rgba(220,38,38,0.5)] bg-red-950/20 text-red-200"
-                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 border-l-4 border-transparent"
-                )}
-              >
-                <div className="flex items-center gap-3">
-                  <Icon
-                    className={cn(
-                      "w-4 h-4 transition-colors",
-                      active ? "text-red-500" : "text-zinc-400 group-hover:text-zinc-300"
-                    )}
-                  />
-                  <span>{item.title}</span>
-                </div>
-
-                {item.subItems && (
-                  <ChevronRight
-                    className={cn(
-                      "w-3.5 h-3.5 text-zinc-400 transition-transform",
-                      active && "rotate-90 text-red-400"
-                    )}
-                  />
-                )}
-              </Link>
-
-              
-              {item.subItems && active && (
-                <div className="pl-7 pr-1 space-y-1 py-1 border-l border-zinc-800/80 ml-4">
-                  {item.subItems.map((sub) => {
-                    const subActive = pathname === sub.href;
-                    const SubIcon = sub.icon;
-                    return (
-                      <Link
-                        key={sub.title}
-                        href={sub.href}
-                        className={cn(
-                          "flex items-center gap-2.5 px-3 py-1.5 rounded text-xs font-mono transition-colors",
-                          subActive
-                            ? "text-red-400 bg-red-950/40 border border-red-800/40 shadow-[0_0_8px_rgba(220,38,38,0.2)]"
-                            : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50"
-                        )}
-                      >
-                        <SubIcon className="w-3.5 h-3.5" />
-                        <span>{sub.title}</span>
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="p-4 border-t border-zinc-800/80 bg-zinc-950/90 text-xs">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-[10px] font-mono uppercase text-zinc-400">
-            Active Hub
-          </span>
-          <span className="flex items-center gap-1 text-[10px] font-mono text-red-400">
-            <Radio className="w-3 h-3 text-red-500 animate-pulse" />
-            ONLINE
-          </span>
-        </div>
-        <div className="bg-zinc-900/80 border border-zinc-800 rounded p-2.5 space-y-1">
-          <div className="font-semibold text-zinc-200 text-xs flex items-center justify-between">
-            <span>Mashriq Centre HQ</span>
-            <span className="text-[9px] font-mono bg-red-950/80 text-red-400 px-1 py-0.2 rounded border border-red-800/50">
-              HQ
-            </span>
-          </div>
-          <div className="text-[10px] text-zinc-400 font-mono">
-            Linked Godown: Gulshan Godown
-          </div>
-        </div>
-
-        <div className="mt-3 flex items-center justify-between text-[10px] text-zinc-400 font-mono">
-          <div className="flex items-center gap-1">
-            <ShieldCheck className="w-3 h-3 text-emerald-500" />
-            <span>Govt Sindh Compliant</span>
-          </div>
-          <span>PKR / FIFO</span>
-        </div>
-      </div>
-    </aside>
-  );
+interface SidebarProps {
+  user: SessionUser;
+  pendingCount: number;
+  open: boolean;
+  onClose: () => void;
 }
 
+export function Sidebar({ user, pendingCount, open, onClose }: SidebarProps) {
+  const pathname = usePathname();
+
+  const isActive = (href: string) =>
+    href === "/"
+      ? pathname === "/"
+      : pathname === href || pathname.startsWith(`${href}/`);
+
+  const groups = NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => canAccessPath(user.role, item.href)),
+  })).filter((group) => group.items.length > 0);
+
+  return (
+    <>
+      {open && (
+        <div
+          className="fixed inset-0 z-30 bg-black/70 lg:hidden"
+          onClick={onClose}
+        />
+      )}
+
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-40 flex w-72 flex-none flex-col border-r border-white/10 bg-zinc-950/95 backdrop-blur-xl transition-transform duration-300 lg:static lg:translate-x-0",
+          open ? "translate-x-0" : "-translate-x-full",
+        )}
+      >
+        <div className="flex items-center justify-between gap-3 border-b border-white/10 px-5 py-5">
+          <BrandLogo className="h-12 w-auto object-contain" />
+          <button
+            type="button"
+            aria-label="Close menu"
+            onClick={onClose}
+            className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-white/5 hover:text-white lg:hidden"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-5">
+          {groups.map((group) => (
+            <div key={group.label} className="flex flex-col gap-1">
+              <span className="px-3 pb-1 text-[10px] font-medium uppercase tracking-[0.3em] text-zinc-600">
+                {group.label}
+              </span>
+
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const active = isActive(item.href);
+                const badge =
+                  item.href === "/admin/users" && pendingCount > 0
+                    ? pendingCount
+                    : null;
+
+                if (item.soon) {
+                  return (
+                    <div
+                      key={item.href}
+                      className="flex cursor-not-allowed items-center justify-between rounded-xl px-3 py-2.5 text-sm text-zinc-600"
+                    >
+                      <span className="flex items-center gap-3">
+                        <Icon className="h-4 w-4" />
+                        {item.title}
+                      </span>
+                      <span className="rounded-full border border-white/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-widest text-zinc-500">
+                        Soon
+                      </span>
+                    </div>
+                  );
+                }
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={onClose}
+                    className={cn(
+                      "relative flex items-center justify-between rounded-xl px-3 py-2.5 text-sm transition-all",
+                      active
+                        ? "bg-gradient-to-r from-red-600/25 via-red-600/5 to-transparent font-medium text-white"
+                        : "text-zinc-400 hover:bg-white/5 hover:text-white",
+                    )}
+                  >
+                    {active && (
+                      <span className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.9)]" />
+                    )}
+                    <span className="flex items-center gap-3">
+                      <Icon
+                        className={cn(
+                          "h-4 w-4",
+                          active ? "text-red-400" : "text-zinc-500",
+                        )}
+                      />
+                      {item.title}
+                    </span>
+                    {badge !== null && (
+                      <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold text-white shadow-[0_0_10px_rgba(220,38,38,0.7)]">
+                        {badge}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
+        </nav>
+
+        <div className="border-t border-white/10 p-4">
+          <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+            <span className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-gradient-to-br from-red-600 to-red-900 text-xs font-semibold text-white shadow-[0_0_14px_rgba(220,38,38,0.4)]">
+              {getInitials(user.name)}
+            </span>
+            <div className="flex min-w-0 flex-col">
+              <span className="truncate text-sm font-medium text-white">
+                {user.name}
+              </span>
+              <span className="text-[10px] uppercase tracking-[0.2em] text-red-400">
+                {ROLE_LABELS[user.role]}
+              </span>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </>
+  );
+}

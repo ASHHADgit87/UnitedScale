@@ -1,134 +1,100 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Warehouse as WarehouseIcon,
-  Activity,
-  Terminal,
-  Clock,
-  LogOut,
-} from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { LogOut, MapPin, Menu } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { getInitials } from "@/lib/format";
+import { ROLE_LABELS, type SessionUser } from "@/lib/permissions";
 
-export function Header() {
+interface HeaderProps {
+  user: SessionUser;
+  onMenuClick: () => void;
+}
+
+export function Header({ user, onMenuClick }: HeaderProps) {
   const router = useRouter();
-  const [time, setTime] = useState<string>("");
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [userRole, setUserRole] = useState<string>("ADMIN");
-  const [isSigningOut, setIsSigningOut] = useState<boolean>(false);
+  const [now, setNow] = useState<Date | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
-    const update = () => {
-      const now = new Date();
-      setTime(
-        now.toLocaleTimeString("en-PK", {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-          hour12: false,
-          timeZone: "Asia/Karachi",
-        })
-      );
-    };
-    update();
-    const interval = setInterval(update, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const supabase = createClient();
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (user) {
-          setUserEmail(user.email || null);
-          const role = user.user_metadata?.role || "ADMIN";
-          setUserRole(role);
-        }
-      } catch (err) {
-      }
-    };
-    fetchUser();
+    setNow(new Date());
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
   }, []);
 
   const handleSignOut = async () => {
-    setIsSigningOut(true);
+    setSigningOut(true);
     try {
-      const supabase = createClient();
-      await supabase.auth.signOut();
-      router.push("/login");
+      await createClient().auth.signOut();
+    } finally {
+      router.replace("/login");
       router.refresh();
-    } catch (err) {
-      setIsSigningOut(false);
     }
   };
 
+  const time = now?.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Karachi",
+  });
+  const date = now?.toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    timeZone: "Asia/Karachi",
+  });
+
   return (
-    <header className="h-16 border-b border-zinc-800/80 bg-zinc-950/80 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-20">
+    <header className="sticky top-0 z-20 flex h-16 flex-none items-center justify-between gap-4 border-b border-white/10 bg-zinc-950/70 px-4 backdrop-blur-xl sm:px-6">
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          aria-label="Open menu"
+          onClick={onMenuClick}
+          className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-white/5 hover:text-white lg:hidden"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
 
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-zinc-900/80 border border-zinc-800 text-xs font-mono text-zinc-300">
-          <WarehouseIcon className="w-4 h-4 text-red-500" />
-          <span className="text-zinc-400">ZONE:</span>
-          <span className="text-zinc-100 font-bold">MASHRIQ CENTRE HQ</span>
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse ml-1" />
-        </div>
-
-        <div className="hidden md:flex items-center gap-2 text-xs font-mono text-zinc-400 border-l border-zinc-850 pl-4">
-          <Terminal className="w-3.5 h-3.5 text-red-400" />
-          <span>
-            FIFO-COGS: <strong className="text-red-400">ACTIVE</strong>
-          </span>
+        <div className="hidden items-center gap-2 text-xs text-zinc-400 sm:flex">
+          <MapPin className="h-3.5 w-3.5 text-red-500" />
+          <span>Mashriq Centre, Karachi</span>
         </div>
       </div>
 
-
       <div className="flex items-center gap-4">
-
-        <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded bg-zinc-900/60 border border-zinc-850 text-xs font-mono text-zinc-300">
-          <Clock className="w-3.5 h-3.5 text-red-500" />
-          <span>PKT:</span>
-          <span className="text-red-400 font-bold tracking-wider">
-            {time || "13:00:00"}
+        <div className="hidden flex-col items-end md:flex">
+          <span className="text-sm font-semibold tabular-nums text-white">
+            {time ?? "--:--:--"}
+          </span>
+          <span className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+            {date ?? ""}
           </span>
         </div>
 
-        <ThemeToggle />
-
-        <Badge
-          variant="cyber"
-          className="hidden lg:flex items-center gap-1.5 py-1"
-        >
-          <Activity className="w-3 h-3 text-red-400" />
-          <span>SINDH W&M VERIFIED</span>
-        </Badge>
-
-
-        <div className="flex items-center gap-3 pl-3 border-l border-zinc-850">
-          <div className="w-8 h-8 rounded-md bg-gradient-to-br from-red-700 to-zinc-900 border border-red-600/40 flex items-center justify-center text-xs font-mono font-bold text-white shadow-[0_0_10px_rgba(220,38,38,0.3)]">
-            {userEmail ? userEmail.slice(0, 2).toUpperCase() : "US"}
-          </div>
-          <div className="hidden md:flex flex-col text-left">
-            <span className="text-xs font-medium text-zinc-200 leading-tight">
-              {userEmail ? userEmail.split("@")[0] : "Admin Officer"}
+        <div className="flex items-center gap-3 border-l border-white/10 pl-4">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-red-600 to-red-900 text-xs font-semibold text-white shadow-[0_0_14px_rgba(220,38,38,0.4)]">
+            {getInitials(user.name)}
+          </span>
+          <div className="hidden flex-col sm:flex">
+            <span className="text-sm font-medium leading-tight text-white">
+              {user.name}
             </span>
-            <span className="text-[10px] font-mono text-red-400 uppercase tracking-wider">
-              {userRole}
+            <span className="text-[10px] uppercase tracking-[0.2em] text-red-400">
+              {ROLE_LABELS[user.role]}
             </span>
           </div>
-
           <button
+            type="button"
+            aria-label="Sign out"
             onClick={handleSignOut}
-            disabled={isSigningOut}
-            className="p-1.5 ml-2 rounded hover:bg-red-950/60 text-zinc-400 hover:text-red-400 border border-transparent hover:border-red-800/40 transition-colors"
-            title="Sign Out / Disconnect Terminal"
+            disabled={signingOut}
+            className="rounded-lg border border-transparent p-2 text-zinc-400 transition-colors hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50"
           >
-            <LogOut className="w-4 h-4" />
+            <LogOut className="h-4 w-4" />
           </button>
         </div>
       </div>
