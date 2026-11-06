@@ -1,74 +1,54 @@
-import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { LayerStatus } from "@prisma/client";
+import { NextRequest, NextResponse } from 'next/server';
+import { LayerStatus } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
+import { requireApiUser } from '@/lib/auth';
+import { APP_ROLES } from '@/lib/permissions';
+import { handleApiError, isId } from '@/lib/api-utils';
 
 export async function GET(req: NextRequest) {
+  const auth = await requireApiUser(APP_ROLES);
+  if (!auth.ok) return auth.response;
+
+  const canSeeCosts = auth.user.role !== 'TECHNICIAN';
+
   try {
     const { searchParams } = new URL(req.url);
-    const categoryId = searchParams.get("categoryId") || undefined;
+    const categoryParam = searchParams.get('categoryId');
+    const categoryId = isId(categoryParam) ? categoryParam : undefined;
 
     const products = await prisma.product.findMany({
       where: categoryId ? { categoryId } : undefined,
       include: {
         category: true,
         inventoryLayers: {
-          where: {
-            status: LayerStatus.ACTIVE,
-            remainingQty: { gt: 0 },
-          },
-          include: {
-            warehouse: {
-              select: {
-                id: true,
-                name: true,
-                code: true,
-              },
-            },
-          },
-          orderBy: {
-            fifoDate: "asc",
-          },
+          where: { status: LayerStatus.ACTIVE, remainingQty: { gt: 0 } },
+          include: { warehouse: { select: { id: true, name: true, code: true } } },
+          orderBy: { fifoDate: 'asc' },
         },
       },
-      orderBy: {
-        name: "asc",
-      },
+      orderBy: { name: 'asc' },
     });
 
-    const enriched = products.map((prod) => {
-      const totalAvailable = prod.inventoryLayers.reduce(
-        (sum, layer) => sum + Number(layer.remainingQty),
-        0
-      );
-      const totalValuation = prod.inventoryLayers.reduce(
-        (sum, layer) => sum + Number(layer.remainingQty) * Number(layer.unitCost),
-        0
-      );
-      const oldestActiveLayer = prod.inventoryLayers[0] || null;
+    const data = products.map((product) => {
+      const { inventoryLayers, ...rest } = product;
+      const totalAvailable = inventoryLayers.reduce((sum, layer) => sum + Number(layer.remainingQty), 0);
+      const base = { ...rest, totalAvailable, activeLayerCount: inventoryLayers.length };
+
+      if (!canSeeCosts) return base;
 
       return {
-        ...prod,
-        totalAvailable,
-        totalValuation,
-        oldestActiveLayerCost: oldestActiveLayer ? Number(oldestActiveLayer.unitCost) : null,
-        activeLayerCount: prod.inventoryLayers.length,
+        ...base,
+        inventoryLayers,
+        totalValuation: inventoryLayers.reduce(
+          (sum, layer) => sum + Number(layer.remainingQty) * Number(layer.unitCost),
+          0,
+        ),
+        oldestActiveLayerCost: inventoryLayers[0] ? Number(inventoryLayers[0].unitCost) : null,
       };
     });
 
-    return NextResponse.json({
-      success: true,
-      count: enriched.length,
-      data: enriched,
-    });
-  } catch (err: unknown) {
-    console.error("Products API error:", err);
-    return NextResponse.json(
-      {
-        success: false,
-        error: err instanceof Error ? err.message : "Failed to fetch products.",
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: true, count: data.length, data });
+  } catch (err) {
+    return handleApiError(err, 'Fetch products');
   }
 }
-

@@ -1,17 +1,28 @@
-import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { LayerStatus } from "@prisma/client";
+import { NextRequest, NextResponse } from 'next/server';
+import { LayerStatus } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
+import { requireApiUser } from '@/lib/auth';
+import { OFFICE_ROLES } from '@/lib/permissions';
+import { handleApiError, isId } from '@/lib/api-utils';
 
 export async function GET(req: NextRequest) {
+  const auth = await requireApiUser(OFFICE_ROLES);
+  if (!auth.ok) return auth.response;
+
   try {
     const { searchParams } = new URL(req.url);
-    const productId = searchParams.get("productId") || undefined;
-    const warehouseId = searchParams.get("warehouseId") || undefined;
-    const statusParam = searchParams.get("status");
+    const productParam = searchParams.get('productId');
+    const warehouseParam = searchParams.get('warehouseId');
+    const statusParam = searchParams.get('status');
 
-    let status: LayerStatus | undefined = undefined;
-    if (statusParam === "ACTIVE") status = LayerStatus.ACTIVE;
-    if (statusParam === "DEPLETED") status = LayerStatus.DEPLETED;
+    const productId = isId(productParam) ? productParam : undefined;
+    const warehouseId = isId(warehouseParam) ? warehouseParam : undefined;
+    const status =
+      statusParam === 'ACTIVE'
+        ? LayerStatus.ACTIVE
+        : statusParam === 'DEPLETED'
+          ? LayerStatus.DEPLETED
+          : undefined;
 
     const layers = await prisma.inventoryLayer.findMany({
       where: {
@@ -20,43 +31,15 @@ export async function GET(req: NextRequest) {
         ...(status ? { status } : {}),
       },
       include: {
-        product: {
-          select: {
-            id: true,
-            sku: true,
-            name: true,
-            brand: true,
-            unit: true,
-          },
-        },
-        warehouse: {
-          select: {
-            id: true,
-            name: true,
-            code: true,
-            isHeadquarters: true,
-          },
-        },
+        product: { select: { id: true, sku: true, name: true, brand: true, unit: true } },
+        warehouse: { select: { id: true, name: true, code: true, isHeadquarters: true } },
       },
-      orderBy: {
-        fifoDate: "asc",
-      },
+      orderBy: { fifoDate: 'asc' },
+      take: 500,
     });
 
-    return NextResponse.json({
-      success: true,
-      count: layers.length,
-      data: layers,
-    });
-  } catch (err: unknown) {
-    console.error("Error fetching FIFO layers:", err);
-    return NextResponse.json(
-      {
-        success: false,
-        error: err instanceof Error ? err.message : "Failed to fetch inventory layers",
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: true, count: layers.length, data: layers });
+  } catch (err) {
+    return handleApiError(err, 'Fetch stock batches');
   }
 }
-

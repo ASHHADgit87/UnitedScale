@@ -1,24 +1,37 @@
 "use client";
 
-import React from "react";
-import { Sidebar } from "./Sidebar";
-import { Header } from "./Header";
+import { useState, type ReactNode } from "react";
+import { Sidebar } from "@/components/layout/Sidebar";
+import { Header } from "@/components/layout/Header";
+import type { SessionUser } from "@/lib/permissions";
 
 interface DashboardLayoutProps {
-  children: React.ReactNode;
+  user: SessionUser;
+  pendingCount: number;
+  children: ReactNode;
 }
 
-export function DashboardLayout({ children }: DashboardLayoutProps) {
+export function DashboardLayout({
+  user,
+  pendingCount,
+  children,
+}: DashboardLayoutProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-zinc-950 text-zinc-100 cyber-grid relative">
+    <div className="cyber-grid relative flex h-screen w-screen overflow-hidden bg-zinc-950 text-zinc-100">
+      <div className="cyber-ambient-glow pointer-events-none absolute inset-x-0 top-0 h-96" />
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-96 cyber-ambient-glow z-0" />
+      <Sidebar
+        user={user}
+        pendingCount={pendingCount}
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+      />
 
-      <Sidebar />
-
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative z-10">
-        <Header />
-        <main className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6">
+      <div className="relative z-10 flex h-screen min-w-0 flex-1 flex-col overflow-hidden">
+        <Header user={user} onMenuClick={() => setMenuOpen(true)} />
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           {children}
         </main>
       </div>
@@ -27,4 +40,3 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 }
 
 export default DashboardLayout;
-
