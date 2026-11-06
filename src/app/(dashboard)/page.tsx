@@ -1,483 +1,512 @@
-"use client";
-
-import React, { useState } from "react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
-  TrendingUp,
+  ArrowRight,
+  Award,
   Boxes,
+  Building2,
   Layers,
-  ArrowUpRight,
-  ArrowDownLeft,
-  Warehouse,
-  ShieldCheck,
-  Cpu,
-  Radio,
-  Clock,
-  Sparkles,
-  ExternalLink,
-  ChevronRight,
-  AlertTriangle,
-  FileCheck2,
+  PackagePlus,
+  ShoppingCart,
+  TriangleAlert,
+  type LucideIcon,
 } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { LayerStatus } from "@prisma/client";
+import type { ReactNode } from "react";
+import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/auth";
+import { formatDate, formatPkr, formatUnits } from "@/lib/format";
 
-const initialHardware = [
-  {
-    sku: "IND-D900S-LCD",
-    name: "D-900s LCD Indicator",
-    brand: "Yaohua / United Scale",
-    category: "Weighing Indicators",
-    totalStock: 33,
-    activeLayers: 2,
-    oldestCost: 18500,
-    newestCost: 19800,
-    sellingPrice: 24500,
-    rs232: "Active (9600-8-N-1)",
-    status: "OPTIMAL",
-  },
-  {
-    sku: "LC-STYPE-5T",
-    name: "S-Type Load Cell",
-    brand: "Omega",
-    category: "Load Cells",
-    totalStock: 35,
-    activeLayers: 2,
-    oldestCost: 14200,
-    newestCost: 15100,
-    sellingPrice: 19800,
-    rs232: "Analog mV/V",
-    status: "OPTIMAL",
-  },
-  {
-    sku: "PS-500X600-300KG",
-    name: "500X600 Platform Scale",
-    brand: "United Scale",
-    category: "Platform Scales",
-    totalStock: 16,
-    activeLayers: 2,
-    oldestCost: 42000,
-    newestCost: 44500,
-    sellingPrice: 58000,
-    rs232: "Continuous Stream",
-    status: "LOW_STOCK_ALERT",
-  },
-  {
-    sku: "IND-D60-LED",
-    name: "D-60 LED Indicator",
-    brand: "Yaohua",
-    category: "Weighing Indicators",
-    totalStock: 18,
-    activeLayers: 1,
-    oldestCost: 13200,
-    newestCost: 13200,
-    sellingPrice: 16500,
-    rs232: "Active (RS-232)",
-    status: "OPTIMAL",
-  },
-];
+export const dynamic = "force-dynamic";
 
-const fifoQueueVisual = [
-  {
-    id: "LAYER-01",
-    product: "D-900s LCD Indicator",
-    date: "15 Sep 2026",
-    qty: "8 / 20 PCS",
-    unitCost: "PKR 18,500",
-    warehouse: "Mashriq Centre HQ",
-    status: "FIRST IN QUEUE",
-    isNext: true,
+const STOCK_STYLES = {
+  ok: {
+    label: "In stock",
+    className: "border-white/15 bg-white/[0.05] text-zinc-200",
   },
-  {
-    id: "LAYER-02",
-    product: "D-900s LCD Indicator",
-    date: "18 Oct 2026",
-    qty: "25 / 25 PCS",
-    unitCost: "PKR 19,800",
-    warehouse: "Mashriq Centre HQ",
-    status: "QUEUED",
-    isNext: false,
+  low: {
+    label: "Low stock",
+    className: "border-red-500/40 bg-red-500/10 text-red-300",
   },
-  {
-    id: "LAYER-03",
-    product: "S-Type Load Cell",
-    date: "20 Aug 2026",
-    qty: "5 / 15 PCS",
-    unitCost: "PKR 14,200",
-    warehouse: "Mashriq Centre HQ",
-    status: "FIRST IN QUEUE",
-    isNext: true,
+  out: {
+    label: "Out of stock",
+    className: "border-red-500 bg-red-600 text-white",
   },
-  {
-    id: "LAYER-04",
-    product: "500X600 Platform Scale",
-    date: "28 Sep 2026",
-    qty: "4 / 10 PCS",
-    unitCost: "PKR 42,000",
-    warehouse: "Mashriq Centre HQ",
-    status: "FIRST IN QUEUE",
-    isNext: true,
-  },
-];
+} as const;
 
-export default function DashboardPage() {
+function greeting() {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-GB", {
+      hour: "numeric",
+      hourCycle: "h23",
+      timeZone: "Asia/Karachi",
+    }).format(new Date()),
+  );
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
+interface KpiProps {
+  label: string;
+  value: string;
+  note: string;
+  icon: LucideIcon;
+  accent?: boolean;
+}
+
+function Kpi({ label, value, note, icon: Icon, accent = false }: KpiProps) {
   return (
-    <div className="space-y-6">
-      <div className="relative rounded-xl border border-red-900/40 bg-gradient-to-r from-zinc-950 via-zinc-900/80 to-red-950/20 p-6 backdrop-blur-md overflow-hidden">
-        <div className="absolute top-0 right-0 p-4 opacity-10">
-          <Cpu className="w-48 h-48 text-red-500" />
-        </div>
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-red-600 shadow-[0_0_8px_rgba(220,38,38,0.9)] animate-pulse" />
-              <span className="text-xs font-mono tracking-widest text-red-400 uppercase">
-                United Scale Core Command // Mashriq Centre Hub
-              </span>
-            </div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-100 uppercase">
-              Industrial Weighing & FIFO Telemetry
-            </h1>
-            <p className="text-xs text-zinc-400 font-mono max-w-2xl">
-              Strict First-In-First-Out valuation engine active. Multi-warehouse synchronization across
-              Mashriq Centre HQ & Gulshan Godown with Sindh Weights & Measures compliance.
-            </p>
-          </div>
+    <div
+      className={`relative flex min-w-[220px] flex-1 flex-col gap-3 overflow-hidden rounded-2xl border p-5 backdrop-blur-xl ${
+        accent
+          ? "border-red-500/40 bg-gradient-to-br from-red-600/20 via-red-600/5 to-transparent shadow-[0_0_40px_rgba(220,38,38,0.2)]"
+          : "border-white/10 bg-gradient-to-br from-white/[0.06] to-transparent"
+      }`}
+    >
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-red-500/70 to-transparent" />
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-medium uppercase tracking-[0.25em] text-zinc-400">
+          {label}
+        </span>
+        <Icon className="h-4 w-4 text-red-400" />
+      </div>
+      <span className="text-2xl font-semibold tabular-nums text-white">
+        {value}
+      </span>
+      <span className="text-xs text-zinc-500">{note}</span>
+    </div>
+  );
+}
 
-          <div className="flex flex-wrap items-center gap-2.5">
-            <Link href="/sales">
-              <Button variant="cyber" size="sm" className="gap-2 text-xs">
-                <ArrowDownLeft className="w-3.5 h-3.5" />
-                FIFO Stock Deduction
-              </Button>
+interface PanelProps {
+  title: string;
+  subtitle: string;
+  children: ReactNode;
+}
+
+function Panel({ title, subtitle, children }: PanelProps) {
+  return (
+    <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.05] to-transparent backdrop-blur-xl">
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-red-500/60 to-transparent" />
+      <div className="flex flex-col gap-0.5 border-b border-white/10 px-5 py-4">
+        <h2 className="text-sm font-semibold text-white">{title}</h2>
+        <p className="text-xs text-zinc-500">{subtitle}</p>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+export default async function DashboardPage() {
+  const user = await getCurrentUser();
+  if (!user || user.status !== "ACTIVE") redirect("/pending");
+
+  const canSeeCosts = user.role !== "TECHNICIAN";
+  const isOffice = canSeeCosts;
+
+  const [products, warehouses, certificateCount, pendingCount] =
+    await Promise.all([
+      prisma.product.findMany({
+        orderBy: { name: "asc" },
+        select: {
+          id: true,
+          sku: true,
+          name: true,
+          brand: true,
+          sellingPrice: true,
+          minStockLevel: true,
+          inventoryLayers: {
+            where: { status: LayerStatus.ACTIVE, remainingQty: { gt: 0 } },
+            orderBy: { fifoDate: "asc" },
+            select: {
+              warehouseId: true,
+              batchNumber: true,
+              originalQty: true,
+              remainingQty: true,
+              unitCost: true,
+              fifoDate: true,
+            },
+          },
+        },
+      }),
+      prisma.warehouse.findMany({
+        orderBy: { isHeadquarters: "desc" },
+        select: { id: true, name: true, location: true, isHeadquarters: true },
+      }),
+      prisma.calibrationCertificate.count(),
+      user.role === "ADMIN"
+        ? prisma.user.count({
+            where: { status: "PENDING", supabaseId: { not: null } },
+          })
+        : Promise.resolve(0),
+    ]);
+
+  const byWarehouse = new Map<string, { units: number; value: number }>();
+
+  const rows = products.map((product) => {
+    let available = 0;
+    let value = 0;
+
+    product.inventoryLayers.forEach((layer) => {
+      const remaining = Number(layer.remainingQty);
+      const cost = remaining * Number(layer.unitCost);
+      available += remaining;
+      value += cost;
+
+      const current = byWarehouse.get(layer.warehouseId) ?? {
+        units: 0,
+        value: 0,
+      };
+      current.units += remaining;
+      current.value += cost;
+      byWarehouse.set(layer.warehouseId, current);
+    });
+
+    const first = product.inventoryLayers[0];
+    const minimum = Number(product.minStockLevel);
+    const status = available <= 0 ? "out" : available <= minimum ? "low" : "ok";
+
+    return {
+      id: product.id,
+      sku: product.sku,
+      name: product.name,
+      brand: product.brand ?? "—",
+      price: Number(product.sellingPrice),
+      available,
+      value,
+      status,
+      next: first
+        ? {
+            batch: first.batchNumber,
+            fifoDate: first.fifoDate,
+            unitCost: Number(first.unitCost),
+            remaining: Number(first.remainingQty),
+            original: Number(first.originalQty),
+          }
+        : null,
+    };
+  });
+
+  const totalUnits = rows.reduce((sum, row) => sum + row.available, 0);
+  const totalValue = rows.reduce((sum, row) => sum + row.value, 0);
+  const lowCount = rows.filter((row) => row.status !== "ok").length;
+  const activeBatches = products.reduce(
+    (sum, product) => sum + product.inventoryLayers.length,
+    0,
+  );
+
+  const nextBatches = rows
+    .flatMap((row) =>
+      row.next ? [{ id: row.id, name: row.name, ...row.next }] : [],
+    )
+    .sort((a, b) => a.fifoDate.getTime() - b.fifoDate.getTime())
+    .slice(0, 5);
+
+  const firstName = user.name.split(" ")[0];
+
+  return (
+    <div className="flex flex-col gap-6">
+      {pendingCount > 0 && (
+        <Link
+          href="/admin/users"
+          className="flex items-center justify-between gap-3 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200 transition-colors hover:bg-red-500/15"
+        >
+          <span>
+            {pendingCount} {pendingCount === 1 ? "person is" : "people are"}{" "}
+            waiting for access approval.
+          </span>
+          <ArrowRight className="h-4 w-4 flex-none" />
+        </Link>
+      )}
+
+      <section className="relative flex flex-col gap-5 overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.07] via-white/[0.02] to-transparent p-6 backdrop-blur-xl md:flex-row md:items-center md:justify-between">
+        <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-red-600/20 blur-3xl" />
+        <div className="relative flex flex-col gap-2">
+          <span className="text-[10px] font-medium uppercase tracking-[0.3em] text-red-400">
+            United Scale · Karachi
+          </span>
+          <h1 className="text-3xl font-semibold tracking-tight text-white">
+            {greeting()}, {firstName}
+          </h1>
+          <p className="max-w-xl text-sm text-zinc-400">
+            Here is where your stock stands across your warehouses right now.
+          </p>
+        </div>
+
+        {isOffice && (
+          <div className="relative flex flex-wrap gap-3">
+            <Link
+              href="/sales"
+              className="flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-red-700 via-red-600 to-red-500 px-4 text-sm font-semibold text-white shadow-[0_0_24px_rgba(220,38,38,0.45)] transition hover:shadow-[0_0_34px_rgba(239,68,68,0.6)]"
+            >
+              <ShoppingCart className="h-4 w-4" />
+              Record a sale
             </Link>
-            <Link href="/purchasing">
-              <Button variant="outline" size="sm" className="gap-2 text-xs">
-                <ArrowUpRight className="w-3.5 h-3.5 text-emerald-400" />
-                Add Inventory Layer
-              </Button>
+            <Link
+              href="/purchasing"
+              className="flex h-10 items-center gap-2 rounded-xl border border-white/15 bg-white/[0.04] px-4 text-sm font-semibold text-zinc-200 transition hover:border-white/30 hover:bg-white/[0.08]"
+            >
+              <PackagePlus className="h-4 w-4" />
+              Receive stock
             </Link>
           </div>
-        </div>
+        )}
+      </section>
+
+      <div className="flex flex-wrap gap-4">
+        {canSeeCosts && (
+          <Kpi
+            label="Stock value"
+            value={formatPkr(totalValue)}
+            note={`${activeBatches} active batches`}
+            icon={Layers}
+            accent
+          />
+        )}
+        <Kpi
+          label="Units in stock"
+          value={formatUnits(totalUnits)}
+          note={`${rows.length} products`}
+          icon={Boxes}
+          accent={!canSeeCosts}
+        />
+        <Kpi
+          label="Low stock"
+          value={String(lowCount)}
+          note={
+            lowCount === 0 ? "Everything is stocked" : "Products to reorder"
+          }
+          icon={TriangleAlert}
+        />
+        <Kpi
+          label="Locations"
+          value={String(warehouses.length)}
+          note={
+            warehouses.map((warehouse) => warehouse.name).join(" · ") ||
+            "No locations yet"
+          }
+          icon={Building2}
+        />
       </div>
 
+      <div className="flex flex-col gap-6 xl:flex-row">
+        <div className="flex min-w-0 flex-1 flex-col gap-6">
+          {canSeeCosts && (
+            <Panel
+              title="Next stock to be sold"
+              subtitle="The oldest batch of each product is used first."
+            >
+              {nextBatches.length === 0 ? (
+                <p className="px-5 py-8 text-center text-sm text-zinc-500">
+                  No active stock batches yet.
+                </p>
+              ) : (
+                <div className="flex flex-col divide-y divide-white/10">
+                  {nextBatches.map((batch) => {
+                    const percent =
+                      batch.original > 0
+                        ? Math.min(
+                            (batch.remaining / batch.original) * 100,
+                            100,
+                          )
+                        : 0;
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-
-        <Card className="relative overflow-hidden border-zinc-800 bg-zinc-950/70 hover:border-red-600/40 transition-all duration-300">
-          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-red-600 to-transparent opacity-60" />
-          <CardHeader className="p-4 pb-2">
-            <div className="flex items-center justify-between">
-              <CardDescription className="text-zinc-400">TOTAL INVENTORY VALUATION</CardDescription>
-              <Boxes className="w-4 h-4 text-red-500" />
-            </div>
-            <CardTitle className="text-2xl font-bold tracking-tight text-zinc-100 mono-numbers pt-1">
-              PKR 2,410,500
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 pt-1 text-xs text-zinc-400 flex items-center justify-between">
-            <span className="text-emerald-400 flex items-center gap-1 font-mono">
-              <TrendingUp className="w-3 h-3" />
-              100% Strict FIFO Costed
-            </span>
-            <span className="font-mono text-[11px] text-zinc-400">8 Active Layers</span>
-          </CardContent>
-        </Card>
-
-        <Card className="relative overflow-hidden border-zinc-800 bg-zinc-950/70 hover:border-red-600/40 transition-all duration-300">
-          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-red-600 to-transparent opacity-60" />
-          <CardHeader className="p-4 pb-2">
-            <div className="flex items-center justify-between">
-              <CardDescription className="text-zinc-400">WAREHOUSE HUBS</CardDescription>
-              <Warehouse className="w-4 h-4 text-red-500" />
-            </div>
-            <CardTitle className="text-2xl font-bold tracking-tight text-zinc-100 mono-numbers pt-1">
-              2 Locations
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 pt-1 text-xs text-zinc-400 flex items-center justify-between">
-            <span className="text-zinc-300 font-mono">Mashriq HQ + Gulshan</span>
-            <span className="text-emerald-400 font-mono text-[11px]">Synced ACID</span>
-          </CardContent>
-        </Card>
-
-
-        <Card className="relative overflow-hidden border-zinc-800 bg-zinc-950/70 hover:border-red-600/40 transition-all duration-300">
-          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-red-600 to-transparent opacity-60" />
-          <CardHeader className="p-4 pb-2">
-            <div className="flex items-center justify-between">
-              <CardDescription className="text-zinc-400">OLDEST LAYER DEPLETION</CardDescription>
-              <Layers className="w-4 h-4 text-red-500" />
-            </div>
-            <CardTitle className="text-2xl font-bold tracking-tight text-zinc-100 mono-numbers pt-1">
-              64.2% Drained
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 pt-1 text-xs text-zinc-400 flex items-center justify-between">
-            <span className="text-zinc-400 font-mono">Next: LOT-2026-SEP-01</span>
-            <span className="text-red-400 font-mono text-[11px]">Auto Shift</span>
-          </CardContent>
-        </Card>
-
-        <Card className="relative overflow-hidden border-zinc-800 bg-zinc-950/70 hover:border-red-600/40 transition-all duration-300">
-          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-red-600 to-transparent opacity-60" />
-          <CardHeader className="p-4 pb-2">
-            <div className="flex items-center justify-between">
-              <CardDescription className="text-zinc-400">SINDH CALIBRATION STATUS</CardDescription>
-              <ShieldCheck className="w-4 h-4 text-emerald-500" />
-            </div>
-            <CardTitle className="text-2xl font-bold tracking-tight text-emerald-400 mono-numbers pt-1">
-              100% Verified
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 pt-1 text-xs text-zinc-400 flex items-center justify-between">
-            <span className="text-zinc-300 font-mono">Reg: W&M Sindh</span>
-            <span className="text-emerald-400 font-mono text-[11px]">Phase 3 Ready</span>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-        <div className="lg:col-span-2 space-y-6">
-          <Card className="border-zinc-800 bg-zinc-950/80">
-            <CardHeader className="p-5 border-b border-zinc-850 flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-sm font-semibold uppercase tracking-wider text-zinc-200 flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-red-600" />
-                  Strict FIFO Chronological Layer Queue
-                </CardTitle>
-                <CardDescription className="text-xs text-zinc-400 font-mono">
-                  Items sold will automatically deduct from the top chronological layer first.
-                </CardDescription>
-              </div>
-              <Link href="/inventory/layers">
-                <Button variant="ghost" size="sm" className="text-xs text-red-400 hover:text-red-300 gap-1 font-mono">
-                  View All Layers
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </Button>
-              </Link>
-            </CardHeader>
-
-            <CardContent className="p-0">
-              <div className="divide-y divide-zinc-850">
-                {fifoQueueVisual.map((layer, idx) => (
-                  <div
-                    key={layer.id}
-                    className="p-4 flex items-center justify-between hover:bg-zinc-900/40 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="flex flex-col items-center justify-center w-8 h-8 rounded border border-zinc-800 bg-zinc-900 font-mono text-xs text-zinc-400">
-                        0{idx + 1}
-                      </div>
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-zinc-100">{layer.product}</span>
-                          {layer.isNext && (
-                            <Badge variant="cyber" className="text-[10px] py-0 px-1.5">
-                              NEXT DEDUCTION
-                            </Badge>
-                          )}
+                    return (
+                      <div
+                        key={batch.id}
+                        className="flex flex-col gap-2.5 px-5 py-4"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex min-w-0 flex-col">
+                            <span className="truncate text-sm font-medium text-white">
+                              {batch.name}
+                            </span>
+                            <span className="text-xs text-zinc-500">
+                              {batch.batch ?? "Batch"} · received{" "}
+                              {formatDate(batch.fifoDate)}
+                            </span>
+                          </div>
+                          <div className="flex flex-none flex-col items-end">
+                            <span className="text-sm font-semibold tabular-nums text-white">
+                              {formatPkr(batch.unitCost)}
+                            </span>
+                            <span className="text-xs text-zinc-500">
+                              {formatUnits(batch.remaining)} of{" "}
+                              {formatUnits(batch.original)} left
+                            </span>
+                          </div>
                         </div>
-                        <div className="text-xs text-zinc-400 font-mono flex items-center gap-3">
-                          <span>Layer: {layer.id}</span>
-                          <span>•</span>
-                          <span>Procured: {layer.date}</span>
-                          <span>•</span>
-                          <span className="text-zinc-400">{layer.warehouse}</span>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-red-700 to-red-400 shadow-[0_0_8px_rgba(239,68,68,0.6)]"
+                            style={{ width: `${percent}%` }}
+                          />
                         </div>
                       </div>
-                    </div>
+                    );
+                  })}
+                </div>
+              )}
+            </Panel>
+          )}
 
-                    <div className="text-right space-y-0.5">
-                      <div className="text-sm font-bold text-zinc-100 mono-numbers">
-                        {layer.unitCost} <span className="text-[10px] text-zinc-400 font-normal">/ unit</span>
-                      </div>
-                      <div className="text-xs font-mono text-emerald-400">
-                        Remaining: <span className="font-bold">{layer.qty}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-zinc-800 bg-zinc-950/80">
-            <CardHeader className="p-5 border-b border-zinc-850 flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-sm font-semibold uppercase tracking-wider text-zinc-200">
-                  Target Hardware Inventory Status
-                </CardTitle>
-                <CardDescription className="text-xs text-zinc-400 font-mono">
-                  Real client hardware catalog deployed at Mashriq Centre HQ.
-                </CardDescription>
-              </div>
-              <Badge variant="secondary" className="font-mono text-xs">
-                4 Models Active
-              </Badge>
-            </CardHeader>
-
-            <CardContent className="p-0 overflow-x-auto">
-              <table className="w-full text-left text-xs font-mono">
-                <thead className="bg-zinc-900/60 text-zinc-400 uppercase tracking-wider border-b border-zinc-850">
-                  <tr>
-                    <th className="p-3.5 pl-5">Hardware / Model</th>
-                    <th className="p-3.5">Brand</th>
-                    <th className="p-3.5">RS-232 Port</th>
-                    <th className="p-3.5">FIFO Cost Base</th>
-                    <th className="p-3.5">Selling Price</th>
-                    <th className="p-3.5">Available</th>
-                    <th className="p-3.5 pr-5 text-right">Status</th>
+          <Panel
+            title="Product availability"
+            subtitle="Live quantities across all locations."
+          >
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-white/10 text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+                    <th className="px-5 py-3 font-medium">Product</th>
+                    <th className="px-3 py-3 font-medium">Brand</th>
+                    <th className="px-3 py-3 font-medium">Available</th>
+                    {canSeeCosts && (
+                      <th className="px-3 py-3 font-medium">Unit cost</th>
+                    )}
+                    <th className="px-3 py-3 font-medium">Price</th>
+                    <th className="px-5 py-3 text-right font-medium">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-850">
-                  {initialHardware.map((hw) => (
-                    <tr key={hw.sku} className="hover:bg-zinc-900/40 transition-colors">
-                      <td className="p-3.5 pl-5 font-sans font-medium text-zinc-200">
-                        <div>{hw.name}</div>
-                        <div className="text-[11px] font-mono text-zinc-400">{hw.sku}</div>
-                      </td>
-                      <td className="p-3.5 text-zinc-400">{hw.brand}</td>
-                      <td className="p-3.5">
-                        <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800 text-[10px]">
-                          {hw.rs232}
-                        </span>
-                      </td>
-                      <td className="p-3.5 text-zinc-300 mono-numbers">
-                        PKR {hw.oldestCost.toLocaleString()}
-                      </td>
-                      <td className="p-3.5 text-red-400 font-bold mono-numbers">
-                        PKR {hw.sellingPrice.toLocaleString()}
-                      </td>
-                      <td className="p-3.5 text-zinc-200 font-bold mono-numbers">
-                        {hw.totalStock} PCS
-                      </td>
-                      <td className="p-3.5 pr-5 text-right">
-                        {hw.status === "OPTIMAL" ? (
-                          <Badge variant="cyberGreen" className="text-[10px]">
-                            HEALTHY
-                          </Badge>
-                        ) : (
-                          <Badge variant="cyberAmber" className="text-[10px]">
-                            LOW STOCK
-                          </Badge>
-                        )}
+                <tbody className="divide-y divide-white/10">
+                  {rows.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="px-5 py-8 text-center text-zinc-500"
+                      >
+                        No products yet.
                       </td>
                     </tr>
-                  ))}
+                  )}
+                  {rows.map((row) => {
+                    const style =
+                      STOCK_STYLES[row.status as keyof typeof STOCK_STYLES];
+                    return (
+                      <tr
+                        key={row.id}
+                        className="transition-colors hover:bg-white/[0.03]"
+                      >
+                        <td className="px-5 py-3.5">
+                          <div className="flex flex-col">
+                            <span className="font-medium text-white">
+                              {row.name}
+                            </span>
+                            <span className="text-xs text-zinc-500">
+                              {row.sku}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3.5 text-zinc-400">
+                          {row.brand}
+                        </td>
+                        <td className="px-3 py-3.5 font-semibold tabular-nums text-white">
+                          {formatUnits(row.available)}
+                        </td>
+                        {canSeeCosts && (
+                          <td className="px-3 py-3.5 tabular-nums text-zinc-300">
+                            {row.next ? formatPkr(row.next.unitCost) : "—"}
+                          </td>
+                        )}
+                        <td className="px-3 py-3.5 tabular-nums text-red-300">
+                          {formatPkr(row.price)}
+                        </td>
+                        <td className="px-5 py-3.5 text-right">
+                          <span
+                            className={`inline-block rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest ${style.className}`}
+                          >
+                            {style.label}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
-            </CardContent>
-          </Card>
+            </div>
+          </Panel>
         </div>
 
-        <div className="space-y-6">
-
-          <Card className="border-zinc-800 bg-zinc-950/80">
-            <CardHeader className="p-5 border-b border-zinc-850">
-              <CardTitle className="text-sm font-semibold uppercase tracking-wider text-zinc-200 flex items-center justify-between">
-                <span>Multi-Warehouse Hubs</span>
-                <Warehouse className="w-4 h-4 text-red-500" />
-              </CardTitle>
-              <CardDescription className="text-xs text-zinc-400 font-mono">
-                Real-time stock distribution across physical sites
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-5 space-y-4">
-
-              <div className="p-3.5 rounded-lg border border-red-900/40 bg-zinc-900/60 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-red-600 animate-pulse" />
-                    <span className="font-semibold text-zinc-100 text-xs uppercase">
-                      Mashriq Centre HQ
+        <div className="flex w-full flex-none flex-col gap-6 xl:w-[380px]">
+          <Panel title="Locations" subtitle="Where your stock is held.">
+            <div className="flex flex-col gap-3 p-5">
+              {warehouses.length === 0 && (
+                <p className="text-sm text-zinc-500">No locations yet.</p>
+              )}
+              {warehouses.map((warehouse) => {
+                const stats = byWarehouse.get(warehouse.id) ?? {
+                  units: 0,
+                  value: 0,
+                };
+                return (
+                  <div
+                    key={warehouse.id}
+                    className={`flex flex-col gap-2 rounded-xl border p-4 ${
+                      warehouse.isHeadquarters
+                        ? "border-red-500/30 bg-red-500/[0.06]"
+                        : "border-white/10 bg-white/[0.03]"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold text-white">
+                        {warehouse.name}
+                      </span>
+                      {warehouse.isHeadquarters && (
+                        <span className="rounded-full border border-red-500/40 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-widest text-red-300">
+                          Head office
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xs leading-relaxed text-zinc-500">
+                      {warehouse.location}
                     </span>
+                    <div className="flex items-center justify-between border-t border-white/10 pt-2 text-xs">
+                      <span className="text-zinc-400">
+                        {formatUnits(stats.units)} units
+                      </span>
+                      {canSeeCosts && (
+                        <span className="font-semibold tabular-nums text-white">
+                          {formatPkr(stats.value)}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <Badge variant="cyber" className="text-[9px] py-0">
-                    PRIMARY HUB
-                  </Badge>
-                </div>
-                <div className="text-[11px] text-zinc-400 font-mono">
-                  Shop #G-12, Sir Shah Suleman Rd, Gulshan-e-Iqbal, Karachi
-                </div>
-                <div className="pt-2 border-t border-zinc-800 flex items-center justify-between text-xs font-mono">
-                  <span className="text-zinc-400">Holding: 55 Units</span>
-                  <span className="text-red-400 font-bold">Valuation: PKR 1,480,000</span>
-                </div>
+                );
+              })}
+              {isOffice && (
+                <Link
+                  href="/transfers"
+                  className="mt-1 flex h-10 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/[0.04] text-sm font-medium text-zinc-200 transition hover:border-white/30 hover:bg-white/[0.08]"
+                >
+                  Transfer stock
+                  <ArrowRight className="h-4 w-4 text-red-400" />
+                </Link>
+              )}
+            </div>
+          </Panel>
+
+          <Panel
+            title="Calibration"
+            subtitle="Certificates for client instruments."
+          >
+            <div className="flex items-center gap-4 p-5">
+              <span className="flex h-12 w-12 flex-none items-center justify-center rounded-xl border border-red-500/30 bg-red-500/10">
+                <Award className="h-5 w-5 text-red-400" />
+              </span>
+              <div className="flex flex-col">
+                <span className="text-2xl font-semibold tabular-nums text-white">
+                  {certificateCount}
+                </span>
+                <span className="text-xs text-zinc-500">
+                  {certificateCount === 1 ? "certificate" : "certificates"} on
+                  record. Issuing opens soon.
+                </span>
               </div>
-
-
-              <div className="p-3.5 rounded-lg border border-zinc-800 bg-zinc-900/40 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-zinc-500" />
-                    <span className="font-semibold text-zinc-200 text-xs uppercase">
-                      Gulshan Godown
-                    </span>
-                  </div>
-                  <Badge variant="secondary" className="text-[9px] py-0">
-                    STORAGE NODE
-                  </Badge>
-                </div>
-                <div className="text-[11px] text-zinc-400 font-mono">
-                  Plot #B-44, Block 13-D, Gulshan-e-Iqbal, Karachi
-                </div>
-                <div className="pt-2 border-t border-zinc-800 flex items-center justify-between text-xs font-mono">
-                  <span className="text-zinc-400">Holding: 42 Units</span>
-                  <span className="text-zinc-300 font-bold">Valuation: PKR 930,500</span>
-                </div>
-              </div>
-
-              <Link href="/transfers" className="block pt-1">
-                <Button variant="outline" size="sm" className="w-full text-xs gap-1.5 font-mono">
-                  <span>Transfer Stock Between Warehouses</span>
-                  <ExternalLink className="w-3 h-3 text-red-400" />
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-
-
-          <Card className="border-red-950/60 bg-gradient-to-b from-zinc-950 to-red-950/20">
-            <CardHeader className="p-5 border-b border-red-900/30">
-              <div className="flex items-center justify-between">
-                <Badge variant="destructive" className="text-[9px]">
-                  PHASE 3 ARCHITECTURE HOOK
-                </Badge>
-                <FileCheck2 className="w-4 h-4 text-red-500" />
-              </div>
-              <CardTitle className="text-sm font-semibold uppercase tracking-wider text-zinc-200 pt-1">
-                Sindh Govt Verification Module
-              </CardTitle>
-              <CardDescription className="text-xs text-zinc-400 font-mono">
-                Weights & Measures Directorate, Sindh
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-5 space-y-3">
-              <div className="p-3 rounded bg-zinc-900/80 border border-zinc-800 font-mono text-xs space-y-1.5">
-                <div className="text-zinc-400 text-[11px]">Active Certificate On Record:</div>
-                <div className="text-red-400 font-bold">US-CAL-SINDH-2026-089</div>
-                <div className="text-zinc-300 text-[11px]">Client: Lucky Cement Ltd (Karachi)</div>
-                <div className="text-emerald-400 text-[10px]">Status: APPROVED_GOVT_SINDH</div>
-              </div>
-
-              <p className="text-[11px] text-zinc-400 leading-relaxed font-mono">
-                Schema model `CalibrationCertificate` is initialized. Ready for Phase 3 automated PDF
-                generation, inspector digital seals, and RS-232 telemetry direct parsing.
-              </p>
-
-              <Link href="/calibration" className="block">
-                <Button variant="secondary" size="sm" className="w-full text-xs font-mono text-zinc-400">
-                  Inspect Phase 3 Blueprint
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
+            </div>
+          </Panel>
         </div>
       </div>
     </div>
   );
 }
-
