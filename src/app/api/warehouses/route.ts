@@ -1,43 +1,26 @@
-import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { requireApiUser } from '@/lib/auth';
+import { APP_ROLES } from '@/lib/permissions';
+import { handleApiError } from '@/lib/api-utils';
 
 export async function GET() {
+  const auth = await requireApiUser(APP_ROLES);
+  if (!auth.ok) return auth.response;
+
   try {
     const warehouses = await prisma.warehouse.findMany({
       include: {
-        manager: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
+        manager: { select: { id: true, name: true } },
         _count: {
-          select: {
-            inventoryLayers: true,
-            sourceMovements: true,
-            destMovements: true,
-          },
+          select: { inventoryLayers: true, sourceMovements: true, destMovements: true },
         },
       },
-      orderBy: {
-        isHeadquarters: "desc",
-      },
+      orderBy: { isHeadquarters: 'desc' },
     });
 
-    return NextResponse.json({
-      success: true,
-      data: warehouses,
-    });
-  } catch (err: unknown) {
-    console.error("Warehouses API error:", err);
-    return NextResponse.json(
-      {
-        success: false,
-        error: err instanceof Error ? err.message : "Failed to fetch warehouses.",
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: true, data: warehouses });
+  } catch (err) {
+    return handleApiError(err, 'Fetch warehouses');
   }
 }
-
