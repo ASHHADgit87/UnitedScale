@@ -1,41 +1,45 @@
-import { NextRequest, NextResponse } from "next/server";
-import { transferStock } from "@/lib/fifo-engine";
+import { NextRequest, NextResponse } from 'next/server';
+import { transferStock } from '@/lib/fifo-engine';
+import { requireApiUser } from '@/lib/auth';
+import { OFFICE_ROLES } from '@/lib/permissions';
+import { clip, fail, handleApiError, isId, parseQuantity } from '@/lib/api-utils';
 
 export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const { productId, fromWarehouseId, toWarehouseId, quantity, performedById, notes } = body;
+  const auth = await requireApiUser(OFFICE_ROLES);
+  if (!auth.ok) return auth.response;
 
-    if (!productId || !fromWarehouseId || !toWarehouseId || !quantity) {
-      return NextResponse.json(
-        { error: "productId, fromWarehouseId, toWarehouseId, and quantity are required." },
-        { status: 400 }
-      );
-    }
+  const body = await req.json().catch(() => null);
+  const quantity = parseQuantity(body?.quantity);
 
-    const result = await transferStock({
-      productId,
-      fromWarehouseId,
-      toWarehouseId,
-      quantity,
-      performedById,
-      notes,
-    });
-
-    return NextResponse.json({
-      success: true,
-      message: `Successfully transferred ${quantity} units across warehouses with zero financial distortion.`,
-      data: result,
-    });
-  } catch (err: unknown) {
-    console.error("Transfer error:", err);
-    return NextResponse.json(
-      {
-        success: false,
-        error: err instanceof Error ? err.message : "Stock transfer failed.",
-      },
-      { status: 500 }
+  if (
+    !isId(body?.productId) ||
+    !isId(body?.fromWarehouseId) ||
+    !isId(body?.toWarehouseId) ||
+    quantity === null
+  ) {
+    return fail(
+      400,
+      'INVALID_INPUT',
+      'productId, fromWarehouseId, toWarehouseId and a positive quantity are required.',
     );
   }
-}
 
+  if (body.fromWarehouseId === body.toWarehouseId) {
+    return fail(400, 'INVALID_INPUT', 'Source and destination must be different locations.');
+  }
+
+  try {
+    const result = await transferStock({
+      productId: body.productId,
+      fromWarehouseId: body.fromWarehouseId,
+      toWarehouseId: body.toWarehouseId,
+      quantity,
+      performedById: auth.user.id,
+      notes: clip(body.notes),
+    });
+
+    return NextResponse.json({ success: true, message: 'Transfer completed.', data: result });
+  } catch (err) {
+    return handleApiError(err, 'Stock transfer');
+  }
+}

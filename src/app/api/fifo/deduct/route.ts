@@ -1,55 +1,36 @@
-import { NextRequest, NextResponse } from "next/server";
-import { deductStock, InsufficientStockError } from "@/lib/fifo-engine";
+import { NextRequest, NextResponse } from 'next/server';
+import { deductStock } from '@/lib/fifo-engine';
+import { requireApiUser } from '@/lib/auth';
+import { OFFICE_ROLES } from '@/lib/permissions';
+import { clip, fail, handleApiError, isId, parseQuantity } from '@/lib/api-utils';
 
 export async function POST(req: NextRequest) {
+  const auth = await requireApiUser(OFFICE_ROLES);
+  if (!auth.ok) return auth.response;
+
+  const body = await req.json().catch(() => null);
+  const quantity = parseQuantity(body?.quantity);
+
+  if (!isId(body?.productId) || !isId(body?.warehouseId) || quantity === null) {
+    return fail(400, 'INVALID_INPUT', 'productId, warehouseId and a positive quantity are required.');
+  }
+
   try {
-    const body = await req.json();
-    const { productId, warehouseId, quantity, performedById, reason, notes } = body;
-
-    if (!productId || !warehouseId || !quantity) {
-      return NextResponse.json(
-        { error: "productId, warehouseId, and quantity are required." },
-        { status: 400 }
-      );
-    }
-
     const result = await deductStock({
-      productId,
-      warehouseId,
+      productId: body.productId,
+      warehouseId: body.warehouseId,
       quantity,
-      performedById,
-      reason: reason || "Sales Order Execution",
-      notes,
+      performedById: auth.user.id,
+      reason: clip(body.reason) ?? 'Sales order',
+      notes: clip(body.notes),
     });
 
     return NextResponse.json({
       success: true,
-      message: `Successfully deducted ${quantity} units using Strict FIFO Costing.`,
+      message: `Sold ${quantity} units, costed from the oldest stock first.`,
       data: result,
     });
-  } catch (err: unknown) {
-    if (err instanceof InsufficientStockError) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "INSUFFICIENT_STOCK",
-          message: err.message,
-          requestedQty: err.requestedQty,
-          availableQty: err.availableQty,
-        },
-        { status: 400 }
-      );
-    }
-
-    console.error("FIFO deduction error:", err);
-    return NextResponse.json(
-      {
-        success: false,
-        error: "INTERNAL_SERVER_ERROR",
-        message: err instanceof Error ? err.message : "Unknown error during FIFO deduction.",
-      },
-      { status: 500 }
-    );
+  } catch (err) {
+    return handleApiError(err, 'Stock deduction');
   }
 }
-
