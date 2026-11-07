@@ -30,7 +30,7 @@ const STOCK_STYLES = {
   },
   out: {
     label: "Out of stock",
-    className: "border-red-500 bg-red-600 text-white",
+    className: "border-red-500 bg-red-600 text-snow",
   },
 } as const;
 
@@ -238,7 +238,7 @@ export default async function DashboardPage() {
           <div className="relative flex flex-wrap gap-3">
             <Link
               href="/sales"
-              className="flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-red-700 via-red-600 to-red-500 px-4 text-sm font-semibold text-white shadow-[0_0_24px_rgba(220,38,38,0.45)] transition hover:shadow-[0_0_34px_rgba(239,68,68,0.6)]"
+              className="flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-red-700 via-red-600 to-red-500 px-4 text-sm font-semibold text-snow shadow-[0_0_24px_rgba(220,38,38,0.45)] transition hover:shadow-[0_0_34px_rgba(239,68,68,0.6)]"
             >
               <ShoppingCart className="h-4 w-4" />
               Record a sale
@@ -500,7 +500,7 @@ export default async function DashboardPage() {
                 </span>
                 <span className="text-xs text-zinc-500">
                   {certificateCount === 1 ? "certificate" : "certificates"} on
-                  record. Issuing opens soon.
+                  record.
                 </span>
               </div>
             </div>

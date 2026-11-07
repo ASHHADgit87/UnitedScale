@@ -1,291 +1,297 @@
-"use client";
-
-import React, { useState } from "react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { ArrowLeftRight, ArrowRight, Search, ShoppingCart } from "lucide-react";
+import { MovementType, Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/auth";
+import { OFFICE_ROLES } from "@/lib/permissions";
+import { formatPkr, formatUnits } from "@/lib/format";
+import { buildHref, first, type SearchParams } from "@/lib/query";
+import { buttonVariants } from "@/components/ui/button";
+import { Badge, type BadgeProps } from "@/components/ui/badge";
 import {
-  ArrowLeftRight,
-  ArrowDownLeft,
-  ArrowUpRight,
-  Search,
-  Filter,
-  FileSpreadsheet,
-  Clock,
-  Warehouse,
-  ShieldCheck,
-  User,
-} from "lucide-react";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+  EmptyState,
+  FilterLink,
+  PageHeader,
+  Pagination,
+  Panel,
+} from "@/components/layout/PageKit";
 
-interface MovementLog {
-  id: string;
-  reference: string;
-  type: "PURCHASE" | "SALE_DEDUCTION" | "TRANSFER_IN" | "TRANSFER_OUT" | "OPENING_STOCK";
-  productName: string;
-  sku: string;
-  quantity: number;
-  unitCost: number;
-  totalCost: number;
-  sourceWarehouse?: string;
-  destWarehouse?: string;
-  performedBy: string;
-  timestamp: string;
-  reason: string;
-}
+export const dynamic = "force-dynamic";
 
-const mockMovements: MovementLog[] = [
-  {
-    id: "MOV-001",
-    reference: "MOV-20261002-014",
-    type: "SALE_DEDUCTION",
-    productName: "D-900s LCD Indicator",
-    sku: "IND-D900S-LCD",
-    quantity: 12,
-    unitCost: 18500,
-    totalCost: 222000,
-    sourceWarehouse: "Mashriq Centre HQ",
-    performedBy: "Tariq Mahmood (Admin)",
-    timestamp: "02 Oct 2026 15:20",
-    reason: "Sale Invoice SI-2026-1088 (Lucky Cement Karachi Terminal)",
-  },
-  {
-    id: "MOV-002",
-    reference: "MOV-20261001-008",
-    type: "TRANSFER_OUT",
-    productName: "S-Type Load Cell",
-    sku: "LC-STYPE-5T",
-    quantity: 10,
-    unitCost: 14200,
-    totalCost: 142000,
-    sourceWarehouse: "Mashriq Centre HQ",
-    destWarehouse: "Gulshan Godown",
-    performedBy: "Imran Khan (Manager)",
-    timestamp: "01 Oct 2026 11:45",
-    reason: "Internal Stock Rebalance to Gulshan Godown",
-  },
-  {
-    id: "MOV-003",
-    reference: "MOV-20261001-009",
-    type: "TRANSFER_IN",
-    productName: "S-Type Load Cell",
-    sku: "LC-STYPE-5T",
-    quantity: 10,
-    unitCost: 14200,
-    totalCost: 142000,
-    sourceWarehouse: "Mashriq Centre HQ",
-    destWarehouse: "Gulshan Godown",
-    performedBy: "Imran Khan (Manager)",
-    timestamp: "01 Oct 2026 12:15",
-    reason: "Transfer Received at Gulshan Godown",
-  },
-  {
-    id: "MOV-004",
-    reference: "MOV-20260928-005",
-    type: "PURCHASE",
-    productName: "500X600 Platform Scale",
-    sku: "PS-500X600-300KG",
-    quantity: 10,
-    unitCost: 42000,
-    totalCost: 420000,
-    destWarehouse: "Mashriq Centre HQ",
-    performedBy: "Tariq Mahmood (Admin)",
-    timestamp: "28 Sep 2026 10:00",
-    reason: "Import Consignment Shipment PO-2026-SEP-301",
-  },
-  {
-    id: "MOV-005",
-    reference: "MOV-20260915-001",
-    type: "PURCHASE",
-    productName: "D-900s LCD Indicator",
-    sku: "IND-D900S-LCD",
-    quantity: 20,
-    unitCost: 18500,
-    totalCost: 370000,
-    destWarehouse: "Mashriq Centre HQ",
-    performedBy: "Imran Khan (Manager)",
-    timestamp: "15 Sep 2026 09:30",
-    reason: "Procurement shipment PO-2026-SEP-104",
-  },
-];
+const PAGE_SIZE = 25;
 
-export default function StockMovementsPage() {
-  const [filterType, setFilterType] = useState<string>("ALL");
-  const [searchTerm, setSearchTerm] = useState<string>("");
+const GROUP_KEYS = ["purchase", "sale", "transfer", "other"] as const;
 
-  const filtered = mockMovements.filter((m) => {
-    if (filterType !== "ALL" && m.type !== filterType) return false;
-    if (
-      searchTerm &&
-      !m.reference.toLowerCase().includes(searchTerm.toLowerCase()) &&
-      !m.productName.toLowerCase().includes(searchTerm.toLowerCase()) &&
-      !m.reason.toLowerCase().includes(searchTerm.toLowerCase())
-    ) {
-      return false;
-    }
-    return true;
+const TYPE_GROUPS: Record<(typeof GROUP_KEYS)[number], MovementType[]> = {
+  purchase: [MovementType.PURCHASE, MovementType.OPENING_STOCK],
+  sale: [MovementType.SALE_DEDUCTION],
+  transfer: [MovementType.TRANSFER_OUT, MovementType.TRANSFER_IN],
+  other: [MovementType.CALIBRATION_USAGE, MovementType.SCRAP_ADJUSTMENT],
+};
+
+const GROUP_LABELS: Record<(typeof GROUP_KEYS)[number], string> = {
+  purchase: "Purchases",
+  sale: "Sales",
+  transfer: "Transfers",
+  other: "Adjustments",
+};
+
+const TYPE_META: Record<
+  MovementType,
+  { label: string; incoming: boolean; variant: BadgeProps["variant"] }
+> = {
+  PURCHASE: { label: "Purchase", incoming: true, variant: "success" },
+  OPENING_STOCK: { label: "Opening stock", incoming: true, variant: "success" },
+  SALE_DEDUCTION: { label: "Sale", incoming: false, variant: "cyber" },
+  TRANSFER_OUT: { label: "Transfer out", incoming: false, variant: "warning" },
+  TRANSFER_IN: { label: "Transfer in", incoming: true, variant: "outline" },
+  CALIBRATION_USAGE: {
+    label: "Calibration use",
+    incoming: false,
+    variant: "secondary",
+  },
+  SCRAP_ADJUSTMENT: {
+    label: "Adjustment",
+    incoming: false,
+    variant: "secondary",
+  },
+};
+
+const formatDateTime = (date: Date) =>
+  date.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Karachi",
   });
 
+interface PageProps {
+  searchParams: Promise<SearchParams>;
+}
+
+export default async function StockMovementsPage({ searchParams }: PageProps) {
+  const user = await getCurrentUser();
+  if (!user || user.status !== "ACTIVE" || !OFFICE_ROLES.includes(user.role))
+    redirect("/");
+
+  const params = await searchParams;
+  const groupKey = GROUP_KEYS.find((key) => key === first(params.type));
+  const query = first(params.q)?.trim().slice(0, 80);
+
+  const where: Prisma.StockMovementWhereInput = {
+    ...(groupKey ? { type: { in: TYPE_GROUPS[groupKey] } } : {}),
+    ...(query
+      ? {
+          OR: [
+            { reference: { contains: query, mode: "insensitive" } },
+            { reason: { contains: query, mode: "insensitive" } },
+            { notes: { contains: query, mode: "insensitive" } },
+            { product: { name: { contains: query, mode: "insensitive" } } },
+            { product: { sku: { contains: query, mode: "insensitive" } } },
+          ],
+        }
+      : {}),
+  };
+
+  const total = await prisma.stockMovement.count({ where });
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const page = Math.min(
+    Math.max(1, Number(first(params.page)) || 1),
+    pageCount,
+  );
+
+  const movements = await prisma.stockMovement.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    skip: (page - 1) * PAGE_SIZE,
+    take: PAGE_SIZE,
+    include: {
+      product: { select: { name: true, sku: true, unit: true } },
+      sourceWarehouse: { select: { name: true } },
+      destWarehouse: { select: { name: true } },
+      performedBy: { select: { name: true } },
+    },
+  });
+
+  const hrefFor = (overrides: Record<string, string | undefined>) =>
+    buildHref("/inventory/movements", {
+      type: groupKey,
+      q: query,
+      ...overrides,
+    });
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-red-600 animate-pulse" />
-            <span className="text-xs font-mono uppercase text-red-400 tracking-wider">
-              Audit Subsystem // Immutable Ledger
-            </span>
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-100 uppercase">
-            Stock Movements & Audit Trail
-          </h1>
-          <p className="text-xs text-zinc-400 font-mono">
-            Every addition, sale deduction, and multi-warehouse transfer is permanently recorded with exact FIFO cost.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Link href="/sales">
-            <Button variant="cyber" size="sm" className="gap-2 text-xs">
-              <ArrowDownLeft className="w-3.5 h-3.5" />
-              New Sale Deduction
-            </Button>
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        eyebrow="Inventory"
+        title="Stock movements"
+        description="A permanent record of every purchase, sale and transfer, with the exact cost used."
+        actions={
+          <Link href="/sales" className={buttonVariants({ size: "sm" })}>
+            <ShoppingCart className="h-4 w-4" />
+            Record a sale
           </Link>
-        </div>
-      </div>
+        }
+      />
 
-
-      <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-lg bg-zinc-900/60 border border-zinc-800">
-        <div className="flex items-center gap-2 bg-zinc-950/80 border border-zinc-800 rounded px-3 py-1.5 w-72">
-          <Search className="w-3.5 h-3.5 text-zinc-500" />
-          <input
-            type="text"
-            placeholder="Search Reference, Product, Reason..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="bg-transparent text-xs text-zinc-200 outline-none w-full placeholder:text-zinc-500 font-mono"
-          />
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-mono uppercase text-zinc-400">Type:</span>
-          {["ALL", "PURCHASE", "SALE_DEDUCTION", "TRANSFER_OUT", "TRANSFER_IN"].map((type) => (
-            <button
-              key={type}
-              onClick={() => setFilterType(type)}
-              className={`px-2.5 py-1 rounded text-xs font-mono transition-colors ${filterType === type
-                  ? "bg-red-950 text-red-300 border border-red-700/60 font-semibold"
-                  : "bg-zinc-900 text-zinc-400 border border-zinc-800 hover:text-zinc-200"
-                }`}
+      <Panel
+        title="Movement log"
+        subtitle={`${total} ${total === 1 ? "entry" : "entries"}`}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 px-5 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <FilterLink
+              href={hrefFor({ type: undefined, page: undefined })}
+              active={!groupKey}
             >
-              {type === "ALL" ? "All" : type.replace("_", " ")}
+              All
+            </FilterLink>
+            {GROUP_KEYS.map((key) => (
+              <FilterLink
+                key={key}
+                href={hrefFor({ type: key, page: undefined })}
+                active={groupKey === key}
+              >
+                {GROUP_LABELS[key]}
+              </FilterLink>
+            ))}
+          </div>
+
+          <form
+            method="get"
+            action="/inventory/movements"
+            className="flex items-center gap-2"
+          >
+            {groupKey && <input type="hidden" name="type" value={groupKey} />}
+            <div className="relative flex items-center">
+              <Search className="pointer-events-none absolute left-3 h-3.5 w-3.5 text-zinc-500" />
+              <input
+                name="q"
+                defaultValue={query ?? ""}
+                placeholder="Search reference, product or note"
+                className="h-9 w-64 rounded-xl border border-white/10 bg-white/[0.04] pl-9 pr-3 text-xs text-white outline-none transition placeholder:text-zinc-600 focus:border-red-500/70"
+              />
+            </div>
+            <button
+              type="submit"
+              className="h-9 rounded-xl border border-white/15 bg-white/[0.04] px-3.5 text-xs font-semibold text-zinc-200 transition hover:border-white/30 hover:bg-white/[0.08]"
+            >
+              Search
             </button>
-          ))}
+          </form>
         </div>
-      </div>
 
-
-      <Card className="border-zinc-800 bg-zinc-950/80 overflow-hidden">
-        <CardHeader className="p-5 border-b border-zinc-850">
-          <CardTitle className="text-sm font-semibold uppercase tracking-wider text-zinc-200">
-            Movement Log Ledger ({filtered.length} entries)
-          </CardTitle>
-        </CardHeader>
-
-        <CardContent className="p-0 overflow-x-auto">
-          <table className="w-full text-left text-xs font-mono">
-            <thead className="bg-zinc-900/80 text-zinc-400 uppercase tracking-wider border-b border-zinc-850">
-              <tr>
-                <th className="p-3.5 pl-5">Timestamp / Ref</th>
-                <th className="p-3.5">Type</th>
-                <th className="p-3.5">Product & SKU</th>
-                <th className="p-3.5">Quantity</th>
-                <th className="p-3.5">FIFO Unit Cost</th>
-                <th className="p-3.5">Total Valuation</th>
-                <th className="p-3.5">Warehouse Route</th>
-                <th className="p-3.5 pr-5">Officer / Reason</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-850">
-              {filtered.map((m) => (
-                <tr key={m.id} className="hover:bg-zinc-900/40 transition-colors">
-                  <td className="p-3.5 pl-5">
-                    <div className="font-bold text-zinc-200">{m.reference}</div>
-                    <div className="text-[11px] text-zinc-400 flex items-center gap-1">
-                      <Clock className="w-3 h-3 text-red-500" />
-                      <span>{m.timestamp}</span>
-                    </div>
-                  </td>
-
-                  <td className="p-3.5">
-                    {m.type === "SALE_DEDUCTION" && (
-                      <Badge variant="destructive" className="text-[9px]">
-                        SALE DEDUCT
-                      </Badge>
-                    )}
-                    {m.type === "PURCHASE" && (
-                      <Badge variant="cyberGreen" className="text-[9px]">
-                        PURCHASE IN
-                      </Badge>
-                    )}
-                    {m.type === "TRANSFER_OUT" && (
-                      <Badge variant="cyberAmber" className="text-[9px]">
-                        TRANSFER OUT
-                      </Badge>
-                    )}
-                    {m.type === "TRANSFER_IN" && (
-                      <Badge variant="cyber" className="text-[9px]">
-                        TRANSFER IN
-                      </Badge>
-                    )}
-                  </td>
-
-                  <td className="p-3.5 font-sans font-medium text-zinc-100">
-                    <div>{m.productName}</div>
-                    <div className="text-[11px] font-mono text-zinc-400">{m.sku}</div>
-                  </td>
-
-                  <td className="p-3.5 mono-numbers text-zinc-100 font-bold">
-                    {m.type === "SALE_DEDUCTION" || m.type === "TRANSFER_OUT" ? "-" : "+"}
-                    {m.quantity} PCS
-                  </td>
-
-                  <td className="p-3.5 text-zinc-300 mono-numbers">
-                    PKR {m.unitCost.toLocaleString()}
-                  </td>
-
-                  <td className="p-3.5 text-red-400 mono-numbers font-bold">
-                    PKR {m.totalCost.toLocaleString()}
-                  </td>
-
-                  <td className="p-3.5 text-zinc-300">
-                    {m.sourceWarehouse && m.destWarehouse ? (
-                      <div className="flex items-center gap-1.5">
-                        <span>{m.sourceWarehouse}</span>
-                        <ArrowLeftRight className="w-3 h-3 text-red-400" />
-                        <span>{m.destWarehouse}</span>
-                      </div>
-                    ) : m.sourceWarehouse ? (
-                      <span>From {m.sourceWarehouse}</span>
-                    ) : (
-                      <span>To {m.destWarehouse}</span>
-                    )}
-                  </td>
-
-                  <td className="p-3.5 pr-5">
-                    <div className="text-zinc-200">{m.reason}</div>
-                    <div className="text-[11px] text-zinc-400 flex items-center gap-1">
-                      <User className="w-3 h-3" />
-                      <span>{m.performedBy}</span>
-                    </div>
-                  </td>
+        {movements.length === 0 ? (
+          <EmptyState
+            icon={ArrowLeftRight}
+            title="No movements found"
+            description="Try a different filter or search term."
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+                  <th className="px-5 py-3 font-medium">Reference</th>
+                  <th className="px-3 py-3 font-medium">Type</th>
+                  <th className="px-3 py-3 font-medium">Product</th>
+                  <th className="px-3 py-3 font-medium">Quantity</th>
+                  <th className="px-3 py-3 font-medium">Unit cost</th>
+                  <th className="px-3 py-3 font-medium">Total</th>
+                  <th className="px-3 py-3 font-medium">Location</th>
+                  <th className="px-5 py-3 font-medium">Recorded by</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
+              </thead>
+              <tbody className="divide-y divide-white/10">
+                {movements.map((movement) => {
+                  const meta = TYPE_META[movement.type];
+                  return (
+                    <tr
+                      key={movement.id}
+                      className="align-top transition-colors hover:bg-white/[0.03]"
+                    >
+                      <td className="px-5 py-3.5">
+                        <div className="flex flex-col">
+                          <span className="font-medium text-white">
+                            {movement.reference}
+                          </span>
+                          <span className="text-xs text-zinc-500">
+                            {formatDateTime(movement.createdAt)}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <Badge variant={meta.variant}>{meta.label}</Badge>
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <div className="flex flex-col">
+                          <span className="text-white">
+                            {movement.product.name}
+                          </span>
+                          <span className="text-xs text-zinc-500">
+                            {movement.product.sku}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3.5 font-semibold tabular-nums text-white">
+                        {meta.incoming ? "+" : "−"}
+                        {formatUnits(Number(movement.quantity))}{" "}
+                        {movement.product.unit}
+                      </td>
+                      <td className="px-3 py-3.5 tabular-nums text-zinc-300">
+                        {movement.unitCost
+                          ? formatPkr(Number(movement.unitCost))
+                          : "—"}
+                      </td>
+                      <td className="px-3 py-3.5 tabular-nums text-red-300">
+                        {movement.totalCost
+                          ? formatPkr(Number(movement.totalCost))
+                          : "—"}
+                      </td>
+                      <td className="px-3 py-3.5 text-zinc-400">
+                        {movement.sourceWarehouse && movement.destWarehouse ? (
+                          <span className="flex flex-wrap items-center gap-1.5">
+                            {movement.sourceWarehouse.name}
+                            <ArrowRight className="h-3 w-3 text-red-400" />
+                            {movement.destWarehouse.name}
+                          </span>
+                        ) : (
+                          ((movement.sourceWarehouse ?? movement.destWarehouse)
+                            ?.name ?? "—")
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex max-w-[260px] flex-col">
+                          <span className="text-zinc-200">
+                            {movement.performedBy?.name ?? "—"}
+                          </span>
+                          {movement.reason && (
+                            <span className="text-xs text-zinc-500">
+                              {movement.reason}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <Pagination
+          page={page}
+          pageCount={pageCount}
+          hrefFor={(target) =>
+            hrefFor({ page: target === 1 ? undefined : String(target) })
+          }
+        />
+      </Panel>
     </div>
   );
 }
-
