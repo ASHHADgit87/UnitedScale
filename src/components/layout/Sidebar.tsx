@@ -53,7 +53,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { title: "Sales", href: "/sales", icon: ShoppingCart },
       { title: "Purchasing", href: "/purchasing", icon: PackagePlus },
       { title: "Transfers", href: "/transfers", icon: Truck },
-      { title: "Calibration", href: "/calibration", icon: Award, soon: true },
+      { title: "Calibration", href: "/calibration", icon: Award },
     ],
   },
   {
@@ -170,7 +170,7 @@ export function Sidebar({ user, pendingCount, open, onClose }: SidebarProps) {
                       {item.title}
                     </span>
                     {badge !== null && (
-                      <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold text-white shadow-[0_0_10px_rgba(220,38,38,0.7)]">
+                      <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold text-snow shadow-[0_0_10px_rgba(220,38,38,0.7)]">
                         {badge}
                       </span>
                     )}
@@ -183,7 +183,7 @@ export function Sidebar({ user, pendingCount, open, onClose }: SidebarProps) {
 
         <div className="border-t border-white/10 p-4">
           <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-3">
-            <span className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-gradient-to-br from-red-600 to-red-900 text-xs font-semibold text-white shadow-[0_0_14px_rgba(220,38,38,0.4)]">
+            <span className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-gradient-to-br from-red-600 to-red-900 text-xs font-semibold text-snow shadow-[0_0_14px_rgba(220,38,38,0.4)]">
               {getInitials(user.name)}
             </span>
             <div className="flex min-w-0 flex-col">
