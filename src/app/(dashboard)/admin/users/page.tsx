@@ -88,7 +88,7 @@ export default async function TeamAccessPage() {
                   className="flex flex-col gap-4 px-5 py-4 md:flex-row md:items-center md:justify-between"
                 >
                   <div className="flex min-w-0 items-center gap-4">
-                    <span className="flex h-10 w-10 flex-none items-center justify-center rounded-lg bg-gradient-to-br from-red-600 to-red-900 text-xs font-semibold text-white">
+                    <span className="flex h-10 w-10 flex-none items-center justify-center rounded-lg bg-gradient-to-br from-red-600 to-red-900 text-xs font-semibold text-snow">
                       {getInitials(user.name)}
                     </span>
                     <div className="flex min-w-0 flex-col">
