@@ -17,7 +17,7 @@ interface UserActionsProps {
 }
 
 const primaryButton =
-  "h-9 rounded-lg bg-gradient-to-r from-red-700 to-red-500 px-3.5 text-xs font-semibold text-white shadow-[0_0_16px_rgba(220,38,38,0.4)] transition hover:shadow-[0_0_24px_rgba(239,68,68,0.6)] disabled:opacity-50";
+  "h-9 rounded-lg bg-gradient-to-r from-red-700 to-red-500 px-3.5 text-xs font-semibold text-snow shadow-[0_0_16px_rgba(220,38,38,0.4)] transition hover:shadow-[0_0_24px_rgba(239,68,68,0.6)] disabled:opacity-50";
 const quietButton =
   "h-9 rounded-lg border border-white/15 bg-white/[0.04] px-3.5 text-xs font-semibold text-zinc-200 transition hover:border-white/30 hover:bg-white/[0.08] disabled:opacity-50";
 

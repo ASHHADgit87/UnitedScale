@@ -1,223 +1,92 @@
-"use client";
+import { redirect } from "next/navigation";
+import { ArrowRight, Truck } from "lucide-react";
+import { MovementType } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/auth";
+import { OFFICE_ROLES } from "@/lib/permissions";
+import { loadStockOptions } from "@/lib/stock-data";
+import { formatDate, formatPkr, formatUnits } from "@/lib/format";
+import { EmptyState, PageHeader, Panel } from "@/components/layout/PageKit";
+import TransferForm from "./TransferForm";
 
-import React, { useState } from "react";
-import {
-  ArrowLeftRight,
-  Warehouse,
-  Boxes,
-  CheckCircle2,
-  AlertTriangle,
-  Send,
-  ShieldCheck,
-  Building2,
-} from "lucide-react";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+export const dynamic = "force-dynamic";
 
-export default function TransfersPage() {
-  const [sourceWarehouse, setSourceWarehouse] = useState<string>("WH-GULSHAN");
-  const [destWarehouse, setDestWarehouse] = useState<string>("HQ-MASHRIQ");
-  const [productSku, setProductSku] = useState<string>("LC-STYPE-5T");
-  const [quantity, setQuantity] = useState<number>(10);
-  const [notes, setNotes] = useState<string>("Transfer for Lucky Cement Karachi project");
-  const [isTransferring, setIsTransferring] = useState<boolean>(false);
-  const [result, setResult] = useState<any>(null);
+export default async function TransfersPage() {
+  const user = await getCurrentUser();
+  if (!user || user.status !== "ACTIVE" || !OFFICE_ROLES.includes(user.role))
+    redirect("/");
 
-  const handleTransfer = () => {
-    setIsTransferring(true);
-    setTimeout(() => {
-      setIsTransferring(false);
-      setResult({
-        transferRef: `TRF-${Date.now().toString(36).toUpperCase()}`,
-        outboundMovement: `MOV-OUT-${Date.now().toString(36).toUpperCase()}`,
-        inboundMovement: `MOV-IN-${Date.now().toString(36).toUpperCase()}`,
-        productSku,
-        quantity,
-        source: sourceWarehouse === "HQ-MASHRIQ" ? "Mashriq Centre HQ" : "Gulshan Godown",
-        destination: destWarehouse === "HQ-MASHRIQ" ? "Mashriq Centre HQ" : "Gulshan Godown",
-        costBasisPreserved: true,
-        unitCost: "PKR 14,200",
-        totalValuation: `PKR ${(quantity * 14200).toLocaleString()}`,
-      });
-    }, 600);
-  };
+  const [{ products, locations }, recent] = await Promise.all([
+    loadStockOptions(),
+    prisma.stockMovement.findMany({
+      where: { type: MovementType.TRANSFER_OUT },
+      orderBy: { createdAt: "desc" },
+      take: 6,
+      select: {
+        id: true,
+        quantity: true,
+        totalCost: true,
+        createdAt: true,
+        product: { select: { name: true, unit: true } },
+        sourceWarehouse: { select: { name: true } },
+        destWarehouse: { select: { name: true } },
+      },
+    }),
+  ]);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <div className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-red-600 animate-pulse" />
-          <span className="text-xs font-mono uppercase text-red-400 tracking-wider">
-            Multi-Warehouse Logistics Engine // Phase 2
-          </span>
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        eyebrow="Operations"
+        title="Transfers"
+        description="Move stock between locations. Each batch keeps its original date and cost."
+      />
+
+      <div className="flex flex-col gap-6 xl:flex-row">
+        <div className="flex min-w-0 flex-1 flex-col gap-6">
+          <TransferForm products={products} locations={locations} />
         </div>
-        <h1 className="text-2xl font-bold tracking-tight text-zinc-100 uppercase">
-          Inter-Warehouse Stock Transfer
-        </h1>
-        <p className="text-xs text-zinc-400 font-mono">
-          Transfer stock between Mashriq Centre HQ and Gulshan Godown while preserving exact FIFO layer
-          unit costs and chronological integrity.
-        </p>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <Card className="border-zinc-800 bg-zinc-950/80">
-            <CardHeader className="p-5 border-b border-zinc-850">
-              <CardTitle className="text-sm font-semibold uppercase tracking-wider text-zinc-200 flex items-center gap-2">
-                <ArrowLeftRight className="w-4 h-4 text-red-500" />
-                Dispatch & Routing Parameters
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-5 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-mono uppercase text-zinc-400 block mb-1.5">
-                    Source Warehouse (Deplete)
-                  </label>
-                  <select
-                    value={sourceWarehouse}
-                    onChange={(e) => setSourceWarehouse(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-xs font-mono text-zinc-100 outline-none focus:border-red-600"
+        <div className="flex w-full flex-none flex-col gap-6 xl:w-[380px]">
+          <Panel
+            title="Recent transfers"
+            subtitle="The latest movements between locations."
+          >
+            {recent.length === 0 ? (
+              <EmptyState
+                icon={Truck}
+                title="No transfers yet"
+                description="Transfers you record will appear here."
+              />
+            ) : (
+              <div className="flex flex-col divide-y divide-white/10">
+                {recent.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="flex flex-col gap-1 px-5 py-3.5"
                   >
-                    <option value="WH-GULSHAN">Gulshan Godown (Plot #B-44)</option>
-                    <option value="HQ-MASHRIQ">Mashriq Centre HQ (Shop #G-12)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs font-mono uppercase text-zinc-400 block mb-1.5">
-                    Destination Warehouse (Receive)
-                  </label>
-                  <select
-                    value={destWarehouse}
-                    onChange={(e) => setDestWarehouse(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-xs font-mono text-zinc-100 outline-none focus:border-red-600"
-                  >
-                    <option value="HQ-MASHRIQ">Mashriq Centre HQ (Shop #G-12)</option>
-                    <option value="WH-GULSHAN">Gulshan Godown (Plot #B-44)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs font-mono uppercase text-zinc-400 block mb-1.5">
-                    Target Hardware Product
-                  </label>
-                  <select
-                    value={productSku}
-                    onChange={(e) => setProductSku(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-xs font-mono text-zinc-100 outline-none focus:border-red-600"
-                  >
-                    <option value="LC-STYPE-5T">S-Type Load Cell (LC-STYPE-5T)</option>
-                    <option value="IND-D900S-LCD">D-900s LCD Indicator (IND-D900S-LCD)</option>
-                    <option value="PS-500X600-300KG">500X600 Platform Scale (PS-500X600-300KG)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs font-mono uppercase text-zinc-400 block mb-1.5">
-                    Transfer Quantity (PCS)
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={quantity}
-                    onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-xs font-mono text-zinc-100 outline-none focus:border-red-600"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-mono uppercase text-zinc-400 block mb-1.5">
-                  Internal Transfer Manifest / Gate Pass Note
-                </label>
-                <input
-                  type="text"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-xs font-mono text-zinc-100 outline-none focus:border-red-600"
-                />
-              </div>
-
-              <div className="pt-2">
-                <Button
-                  variant="cyber"
-                  disabled={sourceWarehouse === destWarehouse || isTransferring}
-                  onClick={handleTransfer}
-                  className="w-full py-6 text-sm gap-2"
-                >
-                  <Send className="w-4 h-4" />
-                  {isTransferring ? "Executing Multi-Warehouse Transaction..." : "Execute Matched Transfer Adjustment"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {result && (
-            <Card className="border-emerald-600/50 bg-emerald-950/20">
-              <CardHeader className="p-5 border-b border-emerald-900/30">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm font-mono">
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>TRANSFER COMPLETE (MATCHED NEGATIVE/POSITIVE ADJUSTMENT)</span>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="truncate text-sm font-medium text-white">
+                        {entry.product.name}
+                      </span>
+                      <span className="flex-none text-sm font-semibold tabular-nums text-white">
+                        {formatPkr(Number(entry.totalCost ?? 0))}
+                      </span>
+                    </div>
+                    <span className="flex flex-wrap items-center gap-1.5 text-xs text-zinc-500">
+                      {formatUnits(Number(entry.quantity))} {entry.product.unit}{" "}
+                      · {entry.sourceWarehouse?.name ?? "—"}
+                      <ArrowRight className="h-3 w-3 text-red-400" />
+                      {entry.destWarehouse?.name ?? "—"} ·{" "}
+                      {formatDate(entry.createdAt)}
+                    </span>
                   </div>
-                  <Badge variant="cyberGreen" className="text-[9px]">
-                    ZERO DISTORTION
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="p-5 font-mono text-xs space-y-2">
-                <div className="flex justify-between text-zinc-300">
-                  <span>Transfer Reference:</span>
-                  <span className="font-bold text-emerald-400">{result.transferRef}</span>
-                </div>
-                <div className="flex justify-between text-zinc-300">
-                  <span>Routing:</span>
-                  <span>{result.source} → {result.destination}</span>
-                </div>
-                <div className="flex justify-between text-zinc-300">
-                  <span>Units Moved:</span>
-                  <span className="font-bold text-zinc-100">{result.quantity} PCS</span>
-                </div>
-                <div className="flex justify-between text-zinc-300">
-                  <span>Preserved FIFO Cost:</span>
-                  <span className="font-bold text-zinc-100">{result.unitCost}</span>
-                </div>
-                <div className="flex justify-between text-zinc-300">
-                  <span>Transferred Valuation:</span>
-                  <span className="font-bold text-red-400">{result.totalValuation}</span>
-                </div>
-                <div className="pt-2 border-t border-emerald-900/40 text-[11px] text-zinc-400">
-                  Audit logs generated: Outward `{result.outboundMovement}` and Inward `{result.inboundMovement}`.
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        <div className="space-y-6">
-          <Card className="border-zinc-800 bg-zinc-950/80">
-            <CardHeader className="p-5 border-b border-zinc-850">
-              <CardTitle className="text-sm font-semibold uppercase tracking-wider text-zinc-200">
-                Financial Continuity Guard
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-5 space-y-3 font-mono text-xs text-zinc-400 leading-relaxed">
-              <p>
-                In standard accounting software, inter-warehouse transfers often wipe out original cost
-                layers or average them out, destroying audit integrity.
-              </p>
-              <p className="text-zinc-200">
-                United Scale's `/src/lib/fifo-engine.ts` automatically splits and clones the exact original
-                procurement layers into the new warehouse, preserving date and cost fidelity 100%.
-              </p>
-            </CardContent>
-          </Card>
+                ))}
+              </div>
+            )}
+          </Panel>
         </div>
       </div>
     </div>
   );
 }
-
