@@ -48,7 +48,7 @@ export function AuthCard({
       </div>
 
       {footer && (
-        <div className="relative border-t border-white/10 bg-black/30 px-7 py-4 sm:px-9">
+        <div className="relative border-t border-white/10 bg-zinc-950/40 px-7 py-4 sm:px-9">
           {footer}
         </div>
       )}
@@ -115,7 +115,7 @@ export function AuthButton({
     "relative flex h-11 w-full items-center justify-center gap-2 overflow-hidden rounded-xl text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60";
   const styles =
     tone === "primary"
-      ? "bg-gradient-to-r from-red-700 via-red-600 to-red-500 text-white shadow-[0_0_24px_rgba(220,38,38,0.45)] hover:shadow-[0_0_34px_rgba(239,68,68,0.6)]"
+      ? "bg-gradient-to-r from-red-700 via-red-600 to-red-500 text-snow shadow-[0_0_24px_rgba(220,38,38,0.45)] hover:shadow-[0_0_34px_rgba(239,68,68,0.6)]"
       : "border border-white/15 bg-white/[0.04] text-zinc-200 hover:border-white/30 hover:bg-white/[0.08]";
 
   return (
