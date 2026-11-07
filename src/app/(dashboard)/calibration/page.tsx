@@ -1,235 +1,345 @@
-"use client";
-
-import React from "react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
-  Lock,
   Award,
-  ShieldCheck,
-  FileText,
-  Cpu,
-  Radio,
   CheckCircle2,
-  AlertTriangle,
-  QrCode,
-  Terminal,
-  Scale,
-  Sparkles,
+  Clock3,
+  Plus,
+  Search,
+  TriangleAlert,
 } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { CertStatus, Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/auth";
+import { formatDate } from "@/lib/format";
+import { buildHref, first, type SearchParams } from "@/lib/query";
+import {
+  STATUS_LABELS,
+  dueInfo,
+  effectiveStatus,
+  type CertificateStatus,
+} from "@/lib/calibration";
+import { buttonVariants } from "@/components/ui/button";
+import { Badge, type BadgeProps } from "@/components/ui/badge";
+import {
+  EmptyState,
+  FilterLink,
+  PageHeader,
+  Pagination,
+  Panel,
+  StatCard,
+} from "@/components/layout/PageKit";
 
-export default function CalibrationPhase3Page() {
+export const dynamic = "force-dynamic";
+
+const PAGE_SIZE = 20;
+
+const FILTERS = [
+  { key: "draft", label: "Drafts" },
+  { key: "pending", label: "Awaiting approval" },
+  { key: "approved", label: "Approved" },
+  { key: "rejected", label: "Rejected" },
+  { key: "due", label: "Due soon or expired" },
+] as const;
+
+const STATUS_VARIANT: Record<CertificateStatus, BadgeProps["variant"]> = {
+  DRAFT: "secondary",
+  PENDING_INSPECTION: "warning",
+  APPROVED_GOVT_SINDH: "success",
+  REJECTED: "destructive",
+  EXPIRED: "destructive",
+};
+
+const toneClass = {
+  ok: "text-zinc-400",
+  soon: "text-red-300",
+  late: "text-red-400",
+} as const;
+
+interface PageProps {
+  searchParams: Promise<SearchParams>;
+}
+
+export default async function CalibrationPage({ searchParams }: PageProps) {
+  const user = await getCurrentUser();
+  if (!user || user.status !== "ACTIVE") redirect("/pending");
+
+  const params = await searchParams;
+  const filter = FILTERS.find((item) => item.key === first(params.status))?.key;
+  const query = first(params.q)?.trim().slice(0, 80);
+  const now = new Date();
+  const soon = new Date(now.getTime() + 30 * 86_400_000);
+
+  const statusWhere: Prisma.CalibrationCertificateWhereInput =
+    filter === "draft"
+      ? { status: CertStatus.DRAFT }
+      : filter === "pending"
+        ? { status: CertStatus.PENDING_INSPECTION }
+        : filter === "approved"
+          ? {
+              status: CertStatus.APPROVED_GOVT_SINDH,
+              nextDueDate: { gte: now },
+            }
+          : filter === "rejected"
+            ? { status: CertStatus.REJECTED }
+            : filter === "due"
+              ? {
+                  status: CertStatus.APPROVED_GOVT_SINDH,
+                  nextDueDate: { lte: soon },
+                }
+              : {};
+
+  const searchWhere: Prisma.CalibrationCertificateWhereInput = query
+    ? {
+        OR: [
+          { clientName: { contains: query, mode: "insensitive" } },
+          { certificateNumber: { contains: query, mode: "insensitive" } },
+          { serialNumber: { contains: query, mode: "insensitive" } },
+          { equipmentModel: { contains: query, mode: "insensitive" } },
+        ],
+      }
+    : {};
+
+  const where: Prisma.CalibrationCertificateWhereInput = {
+    AND: [statusWhere, searchWhere],
+  };
+
+  const [total, valid, pending, due, matching] = await Promise.all([
+    prisma.calibrationCertificate.count(),
+    prisma.calibrationCertificate.count({
+      where: {
+        status: CertStatus.APPROVED_GOVT_SINDH,
+        nextDueDate: { gte: now },
+      },
+    }),
+    prisma.calibrationCertificate.count({
+      where: { status: CertStatus.PENDING_INSPECTION },
+    }),
+    prisma.calibrationCertificate.count({
+      where: {
+        status: CertStatus.APPROVED_GOVT_SINDH,
+        nextDueDate: { lte: soon },
+      },
+    }),
+    prisma.calibrationCertificate.count({ where }),
+  ]);
+
+  const pageCount = Math.max(1, Math.ceil(matching / PAGE_SIZE));
+  const page = Math.min(
+    Math.max(1, Number(first(params.page)) || 1),
+    pageCount,
+  );
+
+  const certificates = await prisma.calibrationCertificate.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    skip: (page - 1) * PAGE_SIZE,
+    take: PAGE_SIZE,
+    select: {
+      id: true,
+      certificateNumber: true,
+      clientName: true,
+      equipmentModel: true,
+      serialNumber: true,
+      calibrationDate: true,
+      nextDueDate: true,
+      status: true,
+    },
+  });
+
+  const hrefFor = (overrides: Record<string, string | undefined>) =>
+    buildHref("/calibration", { status: filter, q: query, ...overrides });
+
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        eyebrow="Calibration"
+        title="Calibration certificates"
+        description="Record calibrations, send them for approval and print certificates for your clients."
+        actions={
+          <Link href="/calibration/new" className={buttonVariants()}>
+            <Plus className="h-4 w-4" />
+            New certificate
+          </Link>
+        }
+      />
 
-      <div className="p-6 rounded-xl border border-red-800/60 bg-gradient-to-r from-red-950/40 via-zinc-950 to-zinc-900 p-6 backdrop-blur-md relative overflow-hidden">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <Badge variant="destructive" className="flex items-center gap-1 text-[10px] py-0.5">
-                <Lock className="w-3 h-3" />
-                <span>PHASE 3 LOCKED SUBSYSTEM</span>
-              </Badge>
-              <span className="text-xs font-mono text-zinc-400">
-                Ready for Activation in Phase 3 Execution
-              </span>
-            </div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-100 uppercase">
-              Govt. of Sindh Calibration & RS-232 Telemetry Engine
-            </h1>
-            <p className="text-xs text-zinc-400 font-mono max-w-3xl">
-              Foundation schema `CalibrationCertificate` and multi-point test models have been fully
-              established in Phase 1 & 2. Automated issuance and live scale serial bus integration will be
-              unlocked in Phase 3.
-            </p>
+      <div className="flex flex-wrap gap-4">
+        <StatCard
+          label="Certificates"
+          value={String(total)}
+          note="On record"
+          icon={Award}
+          accent
+        />
+        <StatCard
+          label="Valid"
+          value={String(valid)}
+          note="Approved and in date"
+          icon={CheckCircle2}
+        />
+        <StatCard
+          label="Awaiting approval"
+          value={String(pending)}
+          note="Submitted by inspectors"
+          icon={Clock3}
+        />
+        <StatCard
+          label="Due soon or expired"
+          value={String(due)}
+          note="Within 30 days or overdue"
+          icon={TriangleAlert}
+        />
+      </div>
+
+      <Panel
+        title="Certificates"
+        subtitle={`${matching} ${matching === 1 ? "result" : "results"}`}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 px-5 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <FilterLink
+              href={hrefFor({ status: undefined, page: undefined })}
+              active={!filter}
+            >
+              All
+            </FilterLink>
+            {FILTERS.map((item) => (
+              <FilterLink
+                key={item.key}
+                href={hrefFor({ status: item.key, page: undefined })}
+                active={filter === item.key}
+              >
+                {item.label}
+              </FilterLink>
+            ))}
           </div>
 
-          <Badge variant="cyber" className="self-start md:self-auto text-xs py-1.5 px-3">
-            SCHEMA HOOK: READY
-          </Badge>
-        </div>
-      </div>
-
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-        <div className="lg:col-span-2 space-y-6">
-          <Card className="border-zinc-800 bg-zinc-950/80">
-            <CardHeader className="p-5 border-b border-zinc-850 flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-sm font-semibold uppercase tracking-wider text-zinc-200 flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  Sindh Directorate of Weights & Measures — Certificate Specimen
-                </CardTitle>
-                <CardDescription className="text-xs text-zinc-400 font-mono">
-                  Seeded model preview for periodic client scale re-verifications
-                </CardDescription>
-              </div>
-              <Badge variant="cyberGreen" className="text-[10px]">
-                OFFICIAL TEMPLATE
-              </Badge>
-            </CardHeader>
-
-            <CardContent className="p-6">
-
-              <div className="p-6 rounded-lg border-2 border-red-900/40 bg-zinc-900/50 space-y-6 relative">
-
-                <div className="absolute right-6 top-6 opacity-20 pointer-events-none">
-                  <Scale className="w-32 h-32 text-red-500" />
-                </div>
-
-                <div className="border-b border-zinc-800 pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                  <div>
-                    <div className="text-xs font-mono uppercase text-red-500 font-bold tracking-widest">
-                      Govt. of Sindh Weights & Measures Directorate
-                    </div>
-                    <div className="text-lg font-bold text-zinc-100 uppercase">
-                      Certificate of Verification & Calibration
-                    </div>
-                    <div className="text-xs font-mono text-zinc-400">
-                      Issued by United Scale (Mashriq Centre, Karachi) under Sindh Standards Act
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs font-mono text-zinc-500">Certificate No:</div>
-                    <div className="text-sm font-bold font-mono text-red-400">US-CAL-SINDH-2026-089</div>
-                    <div className="text-[10px] font-mono text-zinc-400">Govt Stamp: SINDH-WM-KHI-4421</div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 font-mono text-xs">
-                  <div className="space-y-1 p-3 rounded bg-zinc-950/70 border border-zinc-850">
-                    <span className="text-zinc-500 uppercase text-[10px] block">Client / Industry:</span>
-                    <span className="text-zinc-200 font-semibold">Lucky Cement Limited (Karachi Plant)</span>
-                    <span className="text-zinc-400 text-[11px] block">Main Super Highway, Gadap, Karachi</span>
-                  </div>
-
-                  <div className="space-y-1 p-3 rounded bg-zinc-950/70 border border-zinc-850">
-                    <span className="text-zinc-500 uppercase text-[10px] block">Equipment Identified:</span>
-                    <span className="text-zinc-200 font-semibold">500X600 Platform Scale + D-900s</span>
-                    <span className="text-zinc-400 text-[11px] block">Serial No: SN-2026-US-8921</span>
-                  </div>
-
-                  <div className="space-y-1 p-3 rounded bg-zinc-950/70 border border-zinc-850">
-                    <span className="text-zinc-500 uppercase text-[10px] block">Metrological Parameters:</span>
-                    <span className="text-zinc-200">Max Capacity: 300.00 kg | Div: 0.01 kg (10g)</span>
-                    <span className="text-zinc-400 text-[11px] block">Standards: Class M1 Stainless Steel</span>
-                  </div>
-
-                  <div className="space-y-1 p-3 rounded bg-zinc-950/70 border border-zinc-850">
-                    <span className="text-zinc-500 uppercase text-[10px] block">Validity & Sindh Re-verification:</span>
-                    <span className="text-emerald-400 font-semibold">Valid Until: 14 Oct 2027</span>
-                    <span className="text-zinc-400 text-[11px] block">Inspector: Muhammad Ali (Tech #04)</span>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="text-xs font-mono uppercase text-zinc-400">
-                    Certified Linearity Test Data (Sindh W&M Standard)
-                  </div>
-                  <table className="w-full text-left font-mono text-xs">
-                    <thead className="bg-zinc-950 text-zinc-500 uppercase text-[10px]">
-                      <tr>
-                        <th className="p-2">Applied Load</th>
-                        <th className="p-2">Indication (D-900s)</th>
-                        <th className="p-2">Observed Error</th>
-                        <th className="p-2 text-right">Sindh MPE Limit</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-850 text-zinc-300">
-                      <tr>
-                        <td className="p-2">50.00 kg</td>
-                        <td className="p-2">50.00 kg</td>
-                        <td className="p-2 text-emerald-400">0.00 kg</td>
-                        <td className="p-2 text-right text-zinc-400">±0.02 kg</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2">100.00 kg</td>
-                        <td className="p-2">100.00 kg</td>
-                        <td className="p-2 text-emerald-400">0.00 kg</td>
-                        <td className="p-2 text-right text-zinc-400">±0.02 kg</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2">200.00 kg</td>
-                        <td className="p-2">200.01 kg</td>
-                        <td className="p-2 text-emerald-400">+0.01 kg</td>
-                        <td className="p-2 text-right text-zinc-400">±0.04 kg</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2">300.00 kg</td>
-                        <td className="p-2">300.00 kg</td>
-                        <td className="p-2 text-emerald-400">0.00 kg</td>
-                        <td className="p-2 text-right text-zinc-400">±0.04 kg</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <form
+            method="get"
+            action="/calibration"
+            className="flex items-center gap-2"
+          >
+            {filter && <input type="hidden" name="status" value={filter} />}
+            <div className="relative flex items-center">
+              <Search className="pointer-events-none absolute left-3 h-3.5 w-3.5 text-zinc-500" />
+              <input
+                name="q"
+                defaultValue={query ?? ""}
+                placeholder="Client, number or serial"
+                className="h-9 w-56 rounded-xl border border-white/10 bg-white/[0.04] pl-9 pr-3 text-xs text-white outline-none transition placeholder:text-zinc-600 focus:border-red-500/70"
+              />
+            </div>
+            <button
+              type="submit"
+              className="h-9 rounded-xl border border-white/15 bg-white/[0.04] px-3.5 text-xs font-semibold text-zinc-200 transition hover:border-white/30 hover:bg-white/[0.08]"
+            >
+              Search
+            </button>
+          </form>
         </div>
 
+        {certificates.length === 0 ? (
+          <EmptyState
+            icon={Award}
+            title="No certificates found"
+            description="Create a certificate to record a calibration for a client."
+            action={
+              <Link
+                href="/calibration/new"
+                className={buttonVariants({ size: "sm" })}
+              >
+                <Plus className="h-4 w-4" />
+                New certificate
+              </Link>
+            }
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+                  <th className="px-5 py-3 font-medium">Certificate</th>
+                  <th className="px-3 py-3 font-medium">Instrument</th>
+                  <th className="px-3 py-3 font-medium">Calibrated</th>
+                  <th className="px-3 py-3 font-medium">Valid until</th>
+                  <th className="px-5 py-3 text-right font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/10">
+                {certificates.map((certificate) => {
+                  const status = effectiveStatus(
+                    certificate.status,
+                    certificate.nextDueDate,
+                  );
+                  const due = dueInfo(certificate.nextDueDate);
+                  return (
+                    <tr
+                      key={certificate.id}
+                      className="transition-colors hover:bg-white/[0.03]"
+                    >
+                      <td className="px-5 py-3.5">
+                        <Link
+                          href={`/calibration/${certificate.id}`}
+                          className="flex flex-col"
+                        >
+                          <span className="font-medium text-white hover:text-red-300">
+                            {certificate.certificateNumber}
+                          </span>
+                          <span className="text-xs text-zinc-500">
+                            {certificate.clientName}
+                          </span>
+                        </Link>
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <div className="flex flex-col">
+                          <span className="text-zinc-200">
+                            {certificate.equipmentModel}
+                          </span>
+                          <span className="text-xs text-zinc-500">
+                            S/N {certificate.serialNumber}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3.5 text-zinc-400">
+                        {formatDate(certificate.calibrationDate)}
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <div className="flex flex-col">
+                          <span className="text-zinc-300">
+                            {formatDate(certificate.nextDueDate)}
+                          </span>
+                          {certificate.status ===
+                            CertStatus.APPROVED_GOVT_SINDH && (
+                            <span
+                              className={`text-xs font-semibold ${toneClass[due.tone]}`}
+                            >
+                              {due.text}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5 text-right">
+                        <Badge variant={STATUS_VARIANT[status]}>
+                          {STATUS_LABELS[status]}
+                        </Badge>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-        <div className="space-y-6">
-
-          <Card className="border-zinc-800 bg-zinc-950/80">
-            <CardHeader className="p-5 border-b border-zinc-850">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-semibold uppercase tracking-wider text-zinc-200 flex items-center gap-2">
-                  <Terminal className="w-4 h-4 text-red-500" />
-                  RS-232 Hardware Bridge
-                </CardTitle>
-                <Badge variant="secondary" className="text-[9px]">
-                  PHASE 3
-                </Badge>
-              </div>
-              <CardDescription className="text-xs text-zinc-400 font-mono">
-                Direct serial data dump listener for D-900s & D-60
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-5 space-y-3 font-mono text-xs">
-              <div className="p-3 rounded bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-300 space-y-1">
-                <div className="text-zinc-500">RAW SERIAL STREAM (COM3 / 9600-8-N-1):</div>
-                <div className="text-emerald-400 font-mono">ST,GS,+00300.00kg\r\n</div>
-                <div className="text-emerald-400 font-mono">ST,GS,+00300.00kg\r\n</div>
-                <div className="text-red-400 font-mono">OL,GS,+00305.50kg\r\n [OVERLOAD WARNING]</div>
-              </div>
-              <p className="text-[11px] text-zinc-400 leading-relaxed">
-                Will allow automated zero, span calibration capturing directly from the weighing indicator
-                via WebSerial API or edge TCP socket server without manual keying.
-              </p>
-            </CardContent>
-          </Card>
-          <Card className="border-zinc-800 bg-zinc-950/80">
-            <CardHeader className="p-5 border-b border-zinc-850">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-semibold uppercase tracking-wider text-zinc-200 flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-red-500" />
-                  AI Predictive Restocking
-                </CardTitle>
-                <Badge variant="secondary" className="text-[9px]">
-                  PHASE 4
-                </Badge>
-              </div>
-              <CardDescription className="text-xs text-zinc-400 font-mono">
-                LLM FIFO layer velocity analysis
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-5 space-y-3 font-mono text-xs text-zinc-400 leading-relaxed">
-              <p>
-                In Phase 4, an automated agent will compute layer depletion velocity curves, predicting when
-                S-Type Load Cells or D-900s indicators will breach safety stock at Mashriq Centre HQ.
-              </p>
-              <div className="p-2.5 rounded bg-zinc-900/60 border border-zinc-800 text-zinc-300 text-[11px]">
-                Forecast: Platform Scale 500x600 re-order recommended by 18 Nov 2026.
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+        <Pagination
+          page={page}
+          pageCount={pageCount}
+          hrefFor={(target) =>
+            hrefFor({ page: target === 1 ? undefined : String(target) })
+          }
+        />
+      </Panel>
     </div>
   );
 }
-
