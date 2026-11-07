@@ -8,10 +8,13 @@ import {
   BarChart3,
   Layers,
   LayoutDashboard,
+  Package,
   PackagePlus,
   ShoppingCart,
+  Tags,
   Truck,
   Users,
+  Warehouse,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -45,6 +48,14 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
         href: "/inventory/movements",
         icon: ArrowLeftRight,
       },
+    ],
+  },
+  {
+    label: "Catalog",
+    items: [
+      { title: "Products", href: "/catalog/products", icon: Package },
+      { title: "Categories", href: "/catalog/categories", icon: Tags },
+      { title: "Locations", href: "/catalog/locations", icon: Warehouse },
     ],
   },
   {

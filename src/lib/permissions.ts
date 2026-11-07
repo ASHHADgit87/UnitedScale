@@ -28,6 +28,8 @@ const ROUTE_RULES: ReadonlyArray<{
 }> = [
   { prefix: "/admin", roles: ADMIN_ROLES },
   { prefix: "/inventory", roles: OFFICE_ROLES },
+
+  { prefix: "/catalog", roles: OFFICE_ROLES },
   { prefix: "/sales", roles: OFFICE_ROLES },
   { prefix: "/purchasing", roles: OFFICE_ROLES },
   { prefix: "/transfers", roles: OFFICE_ROLES },
