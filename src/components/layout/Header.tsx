@@ -6,6 +6,7 @@ import { LogOut, MapPin, Menu } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { getInitials } from "@/lib/format";
 import { ROLE_LABELS, type SessionUser } from "@/lib/permissions";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
 interface HeaderProps {
   user: SessionUser;
@@ -75,8 +76,10 @@ export function Header({ user, onMenuClick }: HeaderProps) {
           </span>
         </div>
 
+        <ThemeToggle />
+
         <div className="flex items-center gap-3 border-l border-white/10 pl-4">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-red-600 to-red-900 text-xs font-semibold text-white shadow-[0_0_14px_rgba(220,38,38,0.4)]">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-red-600 to-red-900 text-xs font-semibold text-snow shadow-[0_0_14px_rgba(220,38,38,0.4)]">
             {getInitials(user.name)}
           </span>
           <div className="hidden flex-col sm:flex">
