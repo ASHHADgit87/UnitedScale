@@ -11,6 +11,7 @@ import {
   AuthCard,
   AuthField,
 } from "@/components/auth/AuthUI";
+import { SESSION_END_MESSAGES, isSessionEndReason } from "@/lib/session-policy";
 
 const toSafePath = (value: string | null) =>
   value &&
@@ -24,6 +25,9 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = toSafePath(searchParams.get("redirectTo"));
+
+  const reasonParam = searchParams.get("reason");
+  const endedReason = isSessionEndReason(reasonParam) ? reasonParam : null;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -78,6 +82,10 @@ function LoginForm() {
         </div>
       }
     >
+      {endedReason && (
+        <AuthAlert tone="info">{SESSION_END_MESSAGES[endedReason]}</AuthAlert>
+      )}
+
       {error && <AuthAlert tone="error">{error}</AuthAlert>}
 
       <form onSubmit={handleLogin} className="flex flex-col gap-5">
