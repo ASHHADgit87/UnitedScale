@@ -1,5 +1,7 @@
 import type { Config } from "tailwindcss";
 
+const channel = (name: string) => `rgb(var(--${name}) / <alpha-value>)`;
+
 const config: Config = {
   darkMode: ["class"],
   content: [
@@ -58,6 +60,26 @@ const config: Config = {
           900: "#7f1d1d",
           950: "#450a0a",
         },
+        white: channel("c-white"),
+        snow: "#ffffff",
+        zinc: {
+          50: channel("zinc-50"),
+          100: channel("zinc-100"),
+          200: channel("zinc-200"),
+          300: channel("zinc-300"),
+          400: channel("zinc-400"),
+          500: channel("zinc-500"),
+          600: channel("zinc-600"),
+          700: channel("zinc-700"),
+          800: channel("zinc-800"),
+          900: channel("zinc-900"),
+          950: channel("zinc-950"),
+        },
+        red: {
+          200: channel("red-200"),
+          300: channel("red-300"),
+          400: channel("red-400"),
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -65,9 +87,11 @@ const config: Config = {
         sm: "calc(var(--radius) - 4px)",
       },
       boxShadow: {
-        "glow-red": "0 0 15px rgba(220, 38, 38, 0.4), 0 0 30px rgba(185, 28, 28, 0.2)",
+        "glow-red":
+          "0 0 15px rgba(220, 38, 38, 0.4), 0 0 30px rgba(185, 28, 28, 0.2)",
         "glow-red-sm": "0 0 8px rgba(220, 38, 38, 0.5)",
-        "glow-red-lg": "0 0 25px rgba(220, 38, 38, 0.6), 0 0 50px rgba(153, 27, 27, 0.3)",
+        "glow-red-lg":
+          "0 0 25px rgba(220, 38, 38, 0.6), 0 0 50px rgba(153, 27, 27, 0.3)",
       },
       fontFamily: {
         sans: ["var(--font-inter)", "sans-serif"],
@@ -79,4 +103,3 @@ const config: Config = {
 };
 
 export default config;
-
