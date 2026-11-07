@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
+import { SessionGuard } from "@/components/auth/SessionGuard";
 import type { SessionUser } from "@/lib/permissions";
 
 interface DashboardLayoutProps {
@@ -35,6 +36,8 @@ export function DashboardLayout({
           {children}
         </main>
       </div>
+
+      <SessionGuard role={user.role} />
     </div>
   );
 }
