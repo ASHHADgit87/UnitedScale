@@ -49,7 +49,7 @@ export default function CertScene() {
                   <span
                     className={`flex h-5 w-5 flex-none items-center justify-center rounded-full border transition-colors duration-300 ${
                       done
-                        ? "border-red-500 bg-red-500 text-white"
+                        ? "border-red-500 bg-red-500 text-snow"
                         : "border-white/15 text-transparent"
                     }`}
                   >
@@ -111,6 +111,7 @@ export default function CertScene() {
               Issued to Sample Industries
             </span>
             <motion.div
+              className="text-white"
               animate={{ scale: issued ? 1 : 0.6, opacity: issued ? 1 : 0 }}
               transition={{ type: "spring", stiffness: 220, damping: 14 }}
             >
@@ -135,7 +136,7 @@ export default function CertScene() {
                 <motion.path
                   d="M16 24.5 L22 30 L32 18"
                   fill="none"
-                  stroke="#ffffff"
+                  stroke="currentColor"
                   strokeWidth="2.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"

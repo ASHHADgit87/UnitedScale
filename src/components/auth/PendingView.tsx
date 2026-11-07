@@ -81,7 +81,7 @@ export default function PendingView({ state, email }: PendingViewProps) {
                 <span
                   className={`flex h-7 w-7 flex-none items-center justify-center rounded-full border text-xs ${
                     step.done
-                      ? "border-red-500 bg-red-500 text-white"
+                      ? "border-red-500 bg-red-500 text-snow"
                       : step.current
                         ? "animate-pulse border-red-400 text-red-300 shadow-[0_0_14px_rgba(239,68,68,0.6)]"
                         : "border-white/15 text-zinc-600"
